@@ -1,11 +1,11 @@
 
 import { motion, AnimatePresence } from 'motion/react';
 import React, { useState, useEffect, useRef } from 'react';
-import { io, Socket } from 'socket.io-client';
-import Layout from './/Layout';
+import Peer, { DataConnection, MediaConnection } from 'peerjs';
+import Layout from './components/Layout';
 import { gemini } from './geminiService';
 import { HistoryItem, DialogueType, VoiceGender, Flashcard, Dialect, ChatMessage, SessionState } from './types';
-import AudioPlayer from './/AudioPlayer';
+import AudioPlayer from './components/AudioPlayer';
 import { createPcmBlob, decode, decodeAudioData, blobToBase64 } from './audioUtils';
 
 const App: React.FC = () => {
@@ -39,162 +39,100 @@ const App: React.FC = () => {
   const [showCallMenu, setShowCallMenu] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [isSpeakerOn, setIsSpeakerOn] = useState(true);
-  const socketRef = useRef<Socket | null>(null);
+  
+  const peerRef = useRef<Peer | null>(null);
+  const connRef = useRef<DataConnection | null>(null);
+  const callRef = useRef<MediaConnection | null>(null);
+  
   const isSyncingRef = useRef(false);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
   
-  // Live API States
-  const [liveActive, setLiveActive] = useState(false);
-  const liveSessionRef = useRef<any>(null);
-  const nextStartTimeRef = useRef(0);
-  const outputAudioContextRef = useRef<AudioContext | null>(null);
-  const sourcesRef = useRef(new Set<AudioBufferSourceNode>());
-  const mediaStreamRef = useRef<MediaStream | null>(null);
-
-  // Persistence
+  // PeerJS Initialization
   useEffect(() => {
-    const saved = localStorage.getItem('elearning_history');
-    if (saved) setHistory(JSON.parse(saved));
-    const savedDialect = localStorage.getItem('elearning_dialect') as Dialect;
-    if (savedDialect) setSelectedDialect(savedDialect);
-  }, []);
+    const peer = new Peer();
+    peerRef.current = peer;
 
-  useEffect(() => {
-    localStorage.setItem('elearning_history', JSON.stringify(history));
-  }, [history]);
-
-  useEffect(() => {
-    localStorage.setItem('elearning_dialect', selectedDialect);
-  }, [selectedDialect]);
-
-  // Socket Initialization
-  useEffect(() => {
-    let socket: Socket;
-    try {
-      socket = io();
-      socketRef.current = socket;
-    } catch (err) {
-      console.error("Socket connection failed:", err);
-      return;
-    }
-
-    socket.on('room-created', (roomId) => {
-      setSession(prev => ({ ...prev, roomId, isHost: true, connected: false }));
+    peer.on('open', (id) => {
+      console.log('My Peer ID:', id);
     });
 
-    socket.on('room-joined', (roomId) => {
-      setSession(prev => ({ ...prev, roomId, isHost: false, connected: true }));
+    peer.on('connection', (conn) => {
+      connRef.current = conn;
+      setupConnection(conn);
     });
 
-    socket.on('peer-joined', () => {
-      setSession(prev => ({ ...prev, connected: true }));
-      setError("انضم صديقك للجلسة الآن!");
-    });
-
-    socket.on('feature-synced', (feature) => {
-      isSyncingRef.current = true;
-      setActiveFeature(feature);
-      setTimeout(() => { isSyncingRef.current = false; }, 500);
-    });
-
-    socket.on('analyzer-synced', (data) => {
-      isSyncingRef.current = true;
-      if (data.file) setAnalyzerFile(data.file);
-      if (data.history) setAnalyzerChatHistory(data.history);
-      if (data.response) setAnalyzerResponse(data.response);
-      setTimeout(() => { isSyncingRef.current = false; }, 500);
-    });
-
-    socket.on('direct-message', (msg) => {
-      setSession(prev => ({
-        ...prev,
-        messages: [...prev.messages, { sender: 'peer', text: msg, timestamp: Date.now() }]
-      }));
-      if (!showChat) setShowChat(true);
-    });
-
-    // WebRTC Signaling Handlers
-    socket.on('incoming-call', () => {
+    peer.on('call', (call) => {
+      callRef.current = call;
       setSession(prev => ({ ...prev, callState: 'incoming' }));
     });
 
-    socket.on('call-accepted', async () => {
-      setSession(prev => ({ ...prev, callState: 'connected' }));
-      await startWebRTC(true);
-    });
-
-    socket.on('call-rejected', () => {
-      setSession(prev => ({ ...prev, callState: 'idle' }));
-      setError("تم رفض المكالمة.");
-    });
-
-    socket.on('webrtc-offer', async (offer) => {
-      if (!peerConnectionRef.current) await startWebRTC(false);
-      await peerConnectionRef.current?.setRemoteDescription(new RTCSessionDescription(offer));
-      const answer = await peerConnectionRef.current?.createAnswer();
-      await peerConnectionRef.current?.setLocalDescription(answer);
-      socket.emit('webrtc-answer', { roomId: session.roomId, answer });
-    });
-
-    socket.on('webrtc-answer', async (answer) => {
-      await peerConnectionRef.current?.setRemoteDescription(new RTCSessionDescription(answer));
-    });
-
-    socket.on('webrtc-ice-candidate', async (candidate) => {
-      try {
-        await peerConnectionRef.current?.addIceCandidate(new RTCIceCandidate(candidate));
-      } catch (e) {
-        console.error("Error adding ice candidate", e);
-      }
-    });
-
-    socket.on('call-ended', () => {
-      endCall(false);
-    });
-
-    socket.on('error', (msg) => {
-      handleError({ message: msg });
-    });
-
     return () => {
-      socket.disconnect();
+      peer.destroy();
     };
   }, []);
 
-  // Sync Feature Changes
-  useEffect(() => {
-    if (session.roomId && session.connected && !isSyncingRef.current) {
-      socketRef.current?.emit('sync-feature', { roomId: session.roomId, feature: activeFeature });
-    }
-  }, [activeFeature, session.roomId, session.connected]);
+  const setupConnection = (conn: DataConnection) => {
+    conn.on('open', () => {
+      setSession(prev => ({ ...prev, connected: true, roomId: conn.peer }));
+      setError("تم الاتصال بصديقك بنجاح!");
+    });
 
-  // Sync Analyzer Changes
-  useEffect(() => {
-    if (session.roomId && session.connected && !isSyncingRef.current && activeFeature === 'analyzer') {
-      socketRef.current?.emit('sync-analyzer', { 
-        roomId: session.roomId, 
-        data: { file: analyzerFile, history: analyzerChatHistory, response: analyzerResponse } 
-      });
+    conn.on('data', (data: any) => {
+      handleIncomingData(data);
+    });
+
+    conn.on('close', () => {
+      setSession(prev => ({ ...prev, connected: false }));
+      setError("انقطع الاتصال بصديقك.");
+    });
+  };
+
+  const handleIncomingData = (data: any) => {
+    if (data.type === 'chat') {
+      setSession(prev => ({
+        ...prev,
+        messages: [...prev.messages, { sender: 'peer', text: data.text, timestamp: Date.now() }]
+      }));
+      if (!showChat) setShowChat(true);
+    } else if (data.type === 'sync-assistant') {
+      setAssistantResponse(data.payload);
+    } else if (data.type === 'sync-explainer') {
+      setExplainerResponse(data.payload);
+    } else if (data.type === 'sync-analyzer') {
+      if (data.payload.file) setAnalyzerFile(data.payload.file);
+      if (data.payload.history) setAnalyzerChatHistory(data.payload.history);
+      if (data.payload.response) setAnalyzerResponse(data.payload.response);
+    } else if (data.type === 'sync-flashcards') {
+      setFlashcards(data.payload);
+    } else if (data.type === 'sync-podcast') {
+      setPodcastData(data.payload);
     }
-  }, [analyzerFile, analyzerChatHistory, analyzerResponse, session.roomId, session.connected, activeFeature]);
+  };
 
   const createGroupSession = () => {
-    socketRef.current?.emit('create-room');
+    if (peerRef.current) {
+      const id = peerRef.current.id;
+      setSession(prev => ({ ...prev, roomId: id, isHost: true, connected: false }));
+    }
   };
 
   const joinGroupSession = (code: string) => {
-    if (!code || code.length !== 6) {
-      handleError({ message: "يرجى إدخال كود صحيح مكون من 6 أرقام." });
+    if (!code || code.length < 5) {
+      handleError({ message: "يرجى إدخال كود صحيح." });
       return;
     }
-    socketRef.current?.emit('join-room', code);
+    if (peerRef.current) {
+      const conn = peerRef.current.connect(code);
+      connRef.current = conn;
+      setupConnection(conn);
+    }
   };
 
   const sendDirectMessage = (text: string) => {
-    if (session.roomId && session.connected) {
-      socketRef.current?.emit('direct-message', { roomId: session.roomId, message: text });
+    if (connRef.current && connRef.current.open) {
+      connRef.current.send({ type: 'chat', text });
       setSession(prev => ({
         ...prev,
         messages: [...prev.messages, { sender: 'me', text, timestamp: Date.now() }]
@@ -202,74 +140,104 @@ const App: React.FC = () => {
     }
   };
 
-  // WebRTC Logic
-  const startWebRTC = async (isCaller: boolean) => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      localStreamRef.current = stream;
-      
-      const pc = new RTCPeerConnection({
-        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
-      });
-      peerConnectionRef.current = pc;
-
-      stream.getTracks().forEach(track => pc.addTrack(track, stream));
-
-      pc.onicecandidate = (event) => {
-        if (event.candidate) {
-          socketRef.current?.emit('webrtc-ice-candidate', { roomId: session.roomId, candidate: event.candidate });
-        }
-      };
-
-      pc.ontrack = (event) => {
-        if (remoteAudioRef.current) {
-          remoteAudioRef.current.srcObject = event.streams[0];
-        }
-      };
-
-      if (isCaller) {
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-        socketRef.current?.emit('webrtc-offer', { roomId: session.roomId, offer });
+  // Syncing logic for tools
+  useEffect(() => {
+    if (connRef.current && connRef.current.open) {
+      if (activeFeature === 'assistant' && assistantResponse) {
+        connRef.current.send({ type: 'sync-assistant', payload: assistantResponse });
       }
-    } catch (err) {
-      handleError(err);
+    }
+  }, [assistantResponse, activeFeature]);
+
+  useEffect(() => {
+    if (connRef.current && connRef.current.open) {
+      if (activeFeature === 'explainer' && explainerResponse) {
+        connRef.current.send({ type: 'sync-explainer', payload: explainerResponse });
+      }
+    }
+  }, [explainerResponse, activeFeature]);
+
+  useEffect(() => {
+    if (connRef.current && connRef.current.open) {
+      if (activeFeature === 'analyzer') {
+        connRef.current.send({ 
+          type: 'sync-analyzer', 
+          payload: { file: analyzerFile, history: analyzerChatHistory, response: analyzerResponse } 
+        });
+      }
+    }
+  }, [analyzerFile, analyzerChatHistory, analyzerResponse, activeFeature]);
+
+  useEffect(() => {
+    if (connRef.current && connRef.current.open) {
+      if (activeFeature === 'flashcards' && flashcards.length > 0) {
+        connRef.current.send({ type: 'sync-flashcards', payload: flashcards });
+      }
+    }
+  }, [flashcards, activeFeature]);
+
+  useEffect(() => {
+    if (connRef.current && connRef.current.open) {
+      if (activeFeature === 'podcast' && podcastData) {
+        connRef.current.send({ type: 'sync-podcast', payload: podcastData });
+      }
+    }
+  }, [podcastData, activeFeature]);
+
+  const initiateCall = async () => {
+    if (peerRef.current && session.roomId && session.connected) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        localStreamRef.current = stream;
+        const call = peerRef.current.call(session.roomId, stream);
+        callRef.current = call;
+        setSession(prev => ({ ...prev, callState: 'calling' }));
+        
+        call.on('stream', (remoteStream) => {
+          if (remoteAudioRef.current) {
+            remoteAudioRef.current.srcObject = remoteStream;
+            setSession(prev => ({ ...prev, callState: 'connected' }));
+          }
+        });
+      } catch (err) {
+        handleError(err);
+      }
     }
   };
 
-  const initiateCall = () => {
-    if (session.roomId && session.connected) {
-      setSession(prev => ({ ...prev, callState: 'calling' }));
-      socketRef.current?.emit('call-request', { roomId: session.roomId });
-    }
-  };
-
-  const acceptCall = () => {
-    if (session.roomId && session.connected) {
-      setSession(prev => ({ ...prev, callState: 'connected' }));
-      socketRef.current?.emit('call-accept', { roomId: session.roomId });
+  const acceptCall = async () => {
+    if (callRef.current) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        localStreamRef.current = stream;
+        callRef.current.answer(stream);
+        setSession(prev => ({ ...prev, callState: 'connected' }));
+        
+        callRef.current.on('stream', (remoteStream) => {
+          if (remoteAudioRef.current) {
+            remoteAudioRef.current.srcObject = remoteStream;
+          }
+        });
+      } catch (err) {
+        handleError(err);
+      }
     }
   };
 
   const rejectCall = () => {
-    if (session.roomId && session.connected) {
+    if (callRef.current) {
+      callRef.current.close();
       setSession(prev => ({ ...prev, callState: 'idle' }));
-      socketRef.current?.emit('call-reject', { roomId: session.roomId });
     }
   };
 
-  const endCall = (emit = true) => {
-    if (emit && session.roomId) {
-      socketRef.current?.emit('end-call', { roomId: session.roomId });
+  const endCall = () => {
+    if (callRef.current) {
+      callRef.current.close();
     }
-    
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach(track => track.stop());
       localStreamRef.current = null;
-    }
-    if (peerConnectionRef.current) {
-      peerConnectionRef.current.close();
-      peerConnectionRef.current = null;
     }
     setSession(prev => ({ ...prev, callState: 'idle' }));
   };
@@ -1360,7 +1328,7 @@ const App: React.FC = () => {
                     <i className={`fa-solid ${isMuted ? 'fa-microphone-slash' : 'fa-microphone'}`}></i>
                   </button>
                   <button 
-                    onClick={() => endCall(true)}
+                    onClick={() => endCall()}
                     className="w-16 h-16 bg-red-500 text-white rounded-[1.5rem] flex items-center justify-center text-2xl shadow-2xl shadow-red-500/20 hover:bg-red-600 transition-all"
                   >
                     <i className="fa-solid fa-phone-slash"></i>

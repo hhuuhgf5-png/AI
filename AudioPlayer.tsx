@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { decode, pcmToWavUrl } from './audioUtils';
+import { decode, pcmToWavUrl } from '../audioUtils';
 
 interface AudioPlayerProps {
   base64Data: string;
