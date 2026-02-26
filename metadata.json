@@ -1,0 +1,7 @@
+{
+  "name": "E-Learning AI Hub",
+  "description": "A comprehensive educational platform featuring AI assistants, text-to-podcast conversion, flashcard generation, and real-time voice interactions powered by Gemini.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
