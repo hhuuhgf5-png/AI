@@ -103,7 +103,7 @@ export class GeminiService {
       const systemPrompt = `مهمتك هي تحويل النص المقدم لك بالكامل، فكرة بفكرة، إلى حوار (${dialogueType}). يجب أن تحافظ على جميع المعلومات والتفاصيل والأمثلة الموجودة في النص الأصلي دون أي حذف. تنبيه هام جداً: عند الانتهاء من تحويل كل المحتوى الأصلي، انهِ الحوار مباشرة. لا تقم بإضافة ملخص، ولا تقم بتكرار آخر معلومة قمت بشرحها. هام جداً: استخدم المعرفات الفريدة التالية لتحديد المتحدثين بدقة: استخدم 'EXPERT:' للمتحدث الأول، واستخدم 'LEARNER:' للمتحدث الثاني. لا تخلط الأدوار أبداً. ابدأ الحوار مباشرة.`;
       
       const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
+        model: 'gemini-2.0-flash', 
         contents: text,
         config: {
           systemInstruction: systemPrompt
@@ -139,7 +139,7 @@ export class GeminiService {
   async generateFlashcards(text: string, count: number) {
     return this.withRetry(async (ai) => {
       const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
+        model: 'gemini-2.0-flash', 
         contents: `استخرج أهم ${count} مصطلحات من النص ده واعملهم في شكل (سؤال وإجابة) بتنسيق JSON.
         النص: ${text}`,
         config: {
@@ -165,7 +165,7 @@ export class GeminiService {
   async explainLesson(topic: string) {
     return this.withRetry(async (ai) => {
       const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
+        model: 'gemini-2.0-flash', 
         contents: `اشرح لي بالتفصيل درس أو فكرة: ${topic}`,
         config: {
           tools: [{ googleSearch: {} }],
@@ -198,7 +198,7 @@ export class GeminiService {
       });
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
+        model: 'gemini-2.0-flash', 
         contents: contents,
         config: {
           systemInstruction: `أنت محلل بيانات أكاديمي خبير. اسم الملف المرفق هو: "${fileName}". 
