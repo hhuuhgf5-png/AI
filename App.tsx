@@ -1,11 +1,11 @@
 
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import React, { useState, useEffect, useRef } from 'react';
-import Peer, { DataConnection, MediaConnection } from 'peerjs';
-import Layout from './/Layout';
+import { Peer, DataConnection, MediaConnection } from 'peerjs';
+import Layout from './components/Layout';
 import { gemini } from './geminiService';
 import { HistoryItem, DialogueType, VoiceGender, Flashcard, Dialect, ChatMessage, SessionState } from './types';
-import AudioPlayer from './/AudioPlayer';
+import AudioPlayer from './components/AudioPlayer';
 import { createPcmBlob, decode, decodeAudioData, blobToBase64 } from './audioUtils';
 
 const App: React.FC = () => {
@@ -49,28 +49,58 @@ const App: React.FC = () => {
   const localStreamRef = useRef<MediaStream | null>(null);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
   
+  // Live API States
+  const [liveActive, setLiveActive] = useState(false);
+  const liveSessionRef = useRef<any>(null);
+  const nextStartTimeRef = useRef<number>(0);
+  const outputAudioContextRef = useRef<AudioContext | null>(null);
+  const sourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  
   // PeerJS Initialization
   useEffect(() => {
-    const randomId = Math.floor(100000 + Math.random() * 900000).toString();
-    const peer = new Peer(randomId);
-    peerRef.current = peer;
+    const initPeer = () => {
+      // Use a unique prefix to avoid collisions with other PeerJS users
+      const prefix = "elearn-";
+      const randomDigits = Math.floor(100000 + Math.random() * 900000).toString();
+      const peer = new Peer(prefix + randomDigits);
+      peerRef.current = peer;
 
-    peer.on('open', (id) => {
-      console.log('My Peer ID:', id);
-    });
+      peer.on('open', (id) => {
+        console.log('My Peer ID:', id);
+        // If we are already trying to host, update the room ID
+        setSession(prev => {
+          if (prev.isHost) return { ...prev, roomId: id };
+          return prev;
+        });
+      });
 
-    peer.on('connection', (conn) => {
-      connRef.current = conn;
-      setupConnection(conn);
-    });
+      peer.on('error', (err) => {
+        console.error('PeerJS Error:', err.type);
+        if (err.type === 'unavailable-id') {
+          // If ID is taken, try again with a new one
+          peer.destroy();
+          initPeer();
+        } else {
+          handleError(err);
+        }
+      });
 
-    peer.on('call', (call) => {
-      callRef.current = call;
-      setSession(prev => ({ ...prev, callState: 'incoming' }));
-    });
+      peer.on('connection', (conn) => {
+        connRef.current = conn;
+        setupConnection(conn);
+      });
+
+      peer.on('call', (call) => {
+        callRef.current = call;
+        setSession(prev => ({ ...prev, callState: 'incoming' }));
+      });
+    };
+
+    initPeer();
 
     return () => {
-      peer.destroy();
+      peerRef.current?.destroy();
     };
   }, []);
 
@@ -114,8 +144,16 @@ const App: React.FC = () => {
 
   const createGroupSession = () => {
     if (peerRef.current) {
+      if (!peerRef.current.id) {
+        setLoadingMessage("جاري تهيئة الاتصال... يرجى المحاولة مرة أخرى خلال ثوانٍ");
+        setLoading(true);
+        setTimeout(() => setLoading(false), 2000);
+        return;
+      }
       const id = peerRef.current.id;
       setSession(prev => ({ ...prev, roomId: id, isHost: true, connected: false }));
+    } else {
+      handleError({ message: "فشل تهيئة نظام الاتصال. يرجى تحديث الصفحة." });
     }
   };
 
@@ -125,7 +163,9 @@ const App: React.FC = () => {
       return;
     }
     if (peerRef.current) {
-      const conn = peerRef.current.connect(code);
+      // Prepend the prefix before connecting
+      const fullId = code.startsWith("elearn-") ? code : "elearn-" + code;
+      const conn = peerRef.current.connect(fullId);
       connRef.current = conn;
       setupConnection(conn);
     }
@@ -442,12 +482,12 @@ const App: React.FC = () => {
         { role: 'model', parts: [{ text: result }] }
       ];
       setAnalyzerChatHistory(newHistory);
-
+      
       // Sync to peer immediately
-      if (session.roomId && session.connected) {
-        socketRef.current?.emit('sync-analyzer', { 
-          roomId: session.roomId, 
-          data: { file: fileInfo, history: newHistory, response: { text: result } } 
+      if (session.roomId && session.connected && connRef.current?.open) {
+        connRef.current.send({ 
+          type: 'sync-analyzer', 
+          payload: { file: fileInfo, history: newHistory, response: { text: result } } 
         });
       }
       
@@ -828,13 +868,14 @@ const App: React.FC = () => {
                     <div 
                       onClick={() => {
                         if (session.roomId) {
-                          navigator.clipboard.writeText(session.roomId);
+                          const displayId = session.roomId.replace("elearn-", "");
+                          navigator.clipboard.writeText(displayId);
                           setError("تم نسخ الكود بنجاح!");
                         }
                       }}
                       className="text-6xl font-black text-indigo-600 tracking-[0.2em] bg-indigo-50 py-6 rounded-3xl border-2 border-indigo-100 cursor-pointer hover:bg-indigo-100 transition-colors relative group"
                     >
-                      {session.roomId}
+                      {session.roomId ? session.roomId.replace("elearn-", "") : "..."}
                       <div className="absolute -top-3 right-1/2 translate-x-1/2 bg-indigo-600 text-white text-[10px] px-2 py-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">إضغط للنسخ</div>
                     </div>
                     <button 
