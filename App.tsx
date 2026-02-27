@@ -2,10 +2,10 @@
 import { motion, AnimatePresence } from 'motion/react';
 import React, { useState, useEffect, useRef } from 'react';
 import Peer, { DataConnection, MediaConnection } from 'peerjs';
-import Layout from './/Layout';
+import Layout from './components/Layout';
 import { gemini } from './geminiService';
 import { HistoryItem, DialogueType, VoiceGender, Flashcard, Dialect, ChatMessage, SessionState } from './types';
-import AudioPlayer from './/AudioPlayer';
+import AudioPlayer from './components/AudioPlayer';
 import { createPcmBlob, decode, decodeAudioData, blobToBase64 } from './audioUtils';
 
 const App: React.FC = () => {
@@ -51,7 +51,8 @@ const App: React.FC = () => {
   
   // PeerJS Initialization
   useEffect(() => {
-    const peer = new Peer();
+    const randomId = Math.floor(100000 + Math.random() * 900000).toString();
+    const peer = new Peer(randomId);
     peerRef.current = peer;
 
     peer.on('open', (id) => {
@@ -804,9 +805,8 @@ const App: React.FC = () => {
                       <div className="space-y-4">
                         <input 
                           id="join-code-input"
-                          maxLength={6}
-                          placeholder="أدخل الكود (6 أرقام)" 
-                          className="w-full bg-white/[0.03] border border-white/10 p-4 md:p-6 rounded-xl md:rounded-2xl text-center font-black text-xl md:text-3xl tracking-[0.5em] outline-none focus:border-indigo-500/50 text-white placeholder:text-white/10" 
+                          placeholder="أدخل الكود" 
+                          className="w-full bg-white/[0.03] border border-white/10 p-4 md:p-6 rounded-xl md:rounded-2xl text-center font-black text-sm md:text-lg outline-none focus:border-indigo-500/50 text-white placeholder:text-white/10" 
                         />
                         <button 
                           onClick={() => {
@@ -866,8 +866,10 @@ const App: React.FC = () => {
 
                     <button 
                       onClick={() => {
-                        socketRef.current?.disconnect();
-                        setSession({ roomId: null, isHost: false, connected: false, messages: [] });
+                        if (peerRef.current) {
+                          peerRef.current.destroy();
+                        }
+                        setSession({ roomId: null, isHost: false, connected: false, messages: [], callState: 'idle' });
                         window.location.reload();
                       }}
                       className="text-red-500 font-black text-sm hover:underline mt-4"
