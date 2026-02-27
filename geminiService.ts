@@ -64,7 +64,7 @@ export class GeminiService {
         model: 'gemini-2.0-flash',
         contents: prompt,
         config: {
-          tools: [{ googleSearch: {} }],
+       //   tools: [{ googleSearch: {} }],
           systemInstruction: "أنت مساعد شخصي خبير. مهمتك هي الإجابة على الأسئلة العلمية بدقة بناءً على نتائج البحث. نسق الإجابة لتكون واضحة وشاملة مع ذكر المصادر إن وجدت."
         }
       });
