@@ -5,8 +5,7 @@ import { Peer, DataConnection, MediaConnection } from 'peerjs';
 import Layout from './/Layout';
 import { gemini } from './geminiService';
 import { HistoryItem, DialogueType, VoiceGender, Flashcard, Dialect, ChatMessage, SessionState } from './types';
-import AudioPlayer from './
-  /AudioPlayer';
+import AudioPlayer from './/AudioPlayer';
 import { createPcmBlob, decode, decodeAudioData, blobToBase64 } from './audioUtils';
 
 const App: React.FC = () => {
