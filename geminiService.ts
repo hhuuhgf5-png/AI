@@ -61,7 +61,7 @@ export class GeminiService {
   async askAssistant(prompt: string) {
     return this.withRetry(async (ai) => {
       const response = await ai.models.generateContent({
-        model: 'gemini-1.5-flash',
+        model: 'gemini-2.0-flash',
         contents: prompt,
         config: {
           tools: [{ googleSearch: {} }],
