@@ -410,6 +410,7 @@ const App: React.FC = () => {
   // --- Feature Handlers ---
   const handleAssistant = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (loading) return;
     const form = e.currentTarget;
     const promptElement = form.elements.namedItem('prompt') as HTMLInputElement;
     const prompt = promptElement.value;
