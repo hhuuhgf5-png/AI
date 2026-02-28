@@ -12,16 +12,17 @@ const dialectInstructions: Record<Dialect, string> = {
 
 export class GeminiService {
   private keys: string[] = [
-    process.env.GEMINI_API_KEY_1 || '',
-    process.env.GEMINI_API_KEY_2 || '',
-    process.env.GEMINI_API_KEY_3 || ''
-  ].filter(k => k !== '');
+    process.env.GEMINI_API_KEY_1 || (import.meta as any).env?.VITE_GEMINI_API_KEY_1 || '',
+    process.env.GEMINI_API_KEY_2 || (import.meta as any).env?.VITE_GEMINI_API_KEY_2 || '',
+    process.env.GEMINI_API_KEY_3 || (import.meta as any).env?.VITE_GEMINI_API_KEY_3 || ''
+  ].filter(k => k !== '').map(k => k.replace(/\s/g, ''));
 
   private currentKeyIndex = 0;
 
   private getClient() {
-    const key = this.keys[this.currentKeyIndex] || process.env.GEMINI_API_KEY_1 || '';
-    return new GoogleGenAI({ apiKey: key });
+    const key = this.keys[this.currentKeyIndex] || process.env.GEMINI_API_KEY_1 || (import.meta as any).env?.VITE_GEMINI_API_KEY_1 || '';
+    const cleanKey = key.replace(/\s/g, '');
+    return new GoogleGenAI({ apiKey: cleanKey });
   }
 
   private rotateKey() {
@@ -35,7 +36,6 @@ export class GeminiService {
 
   private async withRetry<T>(fn: (ai: GoogleGenAI, model: string) => Promise<T>, preferredModel: string = 'gemini-1.5-flash'): Promise<T> {
     let attempts = 0;
-    // Expanded list of models to try, including the most stable and the newest experimental ones
     const modelsToTry = [
       preferredModel, 
       'gemini-1.5-flash-latest', 
@@ -43,27 +43,34 @@ export class GeminiService {
       'gemini-1.5-pro',
       'gemini-1.5-pro-latest'
     ];
-    const maxAttempts = Math.max(this.keys.length * modelsToTry.length, 5);
+    
+    // Refresh keys to ensure we have the latest from env
+    const currentKeys = [
+      process.env.GEMINI_API_KEY_1 || (import.meta as any).env?.VITE_GEMINI_API_KEY_1 || '',
+      process.env.GEMINI_API_KEY_2 || (import.meta as any).env?.VITE_GEMINI_API_KEY_2 || '',
+      process.env.GEMINI_API_KEY_3 || (import.meta as any).env?.VITE_GEMINI_API_KEY_3 || ''
+    ].filter(k => k !== '').map(k => k.replace(/\s/g, ''));
+
+    const maxAttempts = Math.max(currentKeys.length * modelsToTry.length, 5);
 
     while (attempts < maxAttempts) {
-      const keyIndex = Math.floor(attempts / modelsToTry.length) % (this.keys.length || 1);
+      const keyIndex = Math.floor(attempts / modelsToTry.length) % (currentKeys.length || 1);
       const modelIndex = attempts % modelsToTry.length;
       const currentModel = modelsToTry[modelIndex];
       
       try {
-        // Trim keys to prevent hidden space issues
-        const rawKey = this.keys[keyIndex] || process.env.GEMINI_API_KEY_1 || '';
-        const key = rawKey.trim();
+        const key = currentKeys[keyIndex];
         
-        if (!key) {
+        if (!key || key.length < 10) {
           attempts++;
           continue;
         }
 
-        // Initialize with explicit API version if possible, or default
         const ai = new GoogleGenAI({ apiKey: key });
         
-        console.log(`Attempting ${attempts + 1}: Model ${currentModel} with Key Index ${keyIndex}`);
+        // Log for debugging (masked)
+        console.log(`Attempting with Key: ${key.substring(0, 4)}...${key.substring(key.length - 4)} | Model: ${currentModel}`);
+        
         return await fn(ai, currentModel);
       } catch (error: any) {
         attempts++;
@@ -80,7 +87,7 @@ export class GeminiService {
         throw error;
       }
     }
-    throw new Error("All API keys and models failed. Please check your API key permissions in Google AI Studio.");
+    throw new Error("فشلت جميع المحاولات. يرجى التأكد من نسخ المفتاح بشكل صحيح من Google AI Studio وبدون أي مسافات.");
   }
 
   // 1. Assistant with Search
