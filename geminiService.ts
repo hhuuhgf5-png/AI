@@ -11,241 +11,180 @@ const dialectInstructions: Record<Dialect, string> = {
 };
 
 export class GeminiService {
-  private keys: string[] = [
-    process.env.GEMINI_API_KEY_1 || (import.meta as any).env?.VITE_GEMINI_API_KEY_1 || '',
-    process.env.GEMINI_API_KEY_2 || (import.meta as any).env?.VITE_GEMINI_API_KEY_2 || '',
-    process.env.GEMINI_API_KEY_3 || (import.meta as any).env?.VITE_GEMINI_API_KEY_3 || ''
-  ].filter(k => k !== '').map(k => k.replace(/\s/g, ''));
-
-  private currentKeyIndex = 0;
-
   private getClient() {
-    const key = this.keys[this.currentKeyIndex] || process.env.GEMINI_API_KEY_1 || (import.meta as any).env?.VITE_GEMINI_API_KEY_1 || '';
-    const cleanKey = key.replace(/\s/g, '');
-    return new GoogleGenAI({ apiKey: cleanKey });
-  }
-
-  private rotateKey() {
-    if (this.keys.length > 1) {
-      this.currentKeyIndex = (this.currentKeyIndex + 1) % this.keys.length;
-      console.log(`Rotating to API Key #${this.currentKeyIndex + 1}`);
-      return true;
-    }
-    return false;
-  }
-
-  private async withRetry<T>(fn: (ai: GoogleGenAI, model: string) => Promise<T>, preferredModel: string = 'gemini-1.5-flash'): Promise<T> {
-    let attempts = 0;
-    const modelsToTry = [
-      preferredModel, 
-      'gemini-1.5-flash-latest', 
-      'gemini-2.0-flash-exp', 
-      'gemini-1.5-pro'
-    ];
-    
-    const currentKeys = [
-      process.env.GEMINI_API_KEY_1,
-      (import.meta as any).env?.VITE_GEMINI_API_KEY_1,
-      process.env.GEMINI_API_KEY_2,
-      (import.meta as any).env?.VITE_GEMINI_API_KEY_2
-    ].filter(k => k && typeof k === 'string' && k.length > 10)
-     .map(k => k.replace(/[^a-zA-Z0-9_-]/g, '')); // Clean ALL non-key characters
-
-    if (currentKeys.length === 0) {
-      throw new Error("لم يتم العثور على مفتاح API في النظام. تأكد من إضافة VITE_GEMINI_API_KEY_1 في Vercel.");
-    }
-
-    const maxAttempts = currentKeys.length * modelsToTry.length * 2; // Try each model with each key for both v1 and v1beta
-
-    while (attempts < maxAttempts) {
-      const keyIndex = Math.floor(attempts / (modelsToTry.length * 2)) % currentKeys.length;
-      const modelIndex = Math.floor(attempts / 2) % modelsToTry.length;
-      const apiVersion = attempts % 2 === 0 ? 'v1' : 'v1beta';
-      const currentModel = modelsToTry[modelIndex];
-      
-      try {
-        const key = currentKeys[keyIndex];
-        const ai = new GoogleGenAI({ apiKey: key, apiVersion: apiVersion as any });
-        
-        console.log(`Attempt ${attempts + 1}: Model ${currentModel} | Version ${apiVersion} | Key ${key.substring(0, 5)}...`);
-        return await fn(ai, currentModel);
-      } catch (error: any) {
-        attempts++;
-        const errorMessage = (error?.message || '').toLowerCase();
-        
-        // If it's a fatal error that won't change with retry, we could throw, 
-        // but for now we'll keep trying all combinations.
-        if (attempts < maxAttempts) continue;
-        throw error;
-      }
-    }
-    throw new Error("فشلت جميع المحاولات (v1 & v1beta). يرجى التأكد من أن المفتاح من Google AI Studio ومفعل.");
+    const key = process.env.API_KEY || process.env.GEMINI_API_KEY || '';
+    return new GoogleGenAI({ apiKey: key });
   }
 
   // 1. Assistant with Search
   async askAssistant(prompt: string) {
-    return this.withRetry(async (ai, model) => {
-      const response = await ai.models.generateContent({
-        model: model,
-        contents: prompt,
-        config: {
-          systemInstruction: "أنت مساعد شخصي خبير. مهمتك هي الإجابة على الأسئلة العلمية بدقة. نسق الإجابة لتكون واضحة وشاملة."
-        }
-      });
-      return {
-        text: response.text,
-        sources: []
-      };
+    const ai = this.getClient();
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: prompt,
+      config: {
+        tools: [{ googleSearch: {} }],
+        systemInstruction: "أنت مساعد شخصي خبير. مهمتك هي الإجابة على الأسئلة العلمية بدقة بناءً على نتائج البحث. نسق الإجابة لتكون واضحة وشاملة مع ذكر المصادر إن وجدت."
+      }
     });
+    return {
+      text: response.text,
+      sources: response.candidates?.[0]?.groundingMetadata?.groundingChunks || []
+    };
   }
 
-  // 2. Simple TTS
+  // 2. Simple TTS - FIXED: Swapped Kore/Puck to fix gender mismatch
   async generateTTS(text: string, gender: VoiceGender, dialect: Dialect = 'standard') {
-    return this.withRetry(async (ai, model) => {
-      const voiceName = gender === 'male' ? 'Puck' : 'Kore';
-      const instruction = dialectInstructions[dialect];
-      
-      const response = await ai.models.generateContent({
-        model: model,
-        contents: [{ parts: [{ text: `${instruction}\n\nالنص المطلوب تحويله لصوت: ${text}` }] }],
-        config: {
-          responseModalities: [Modality.AUDIO],
-          speechConfig: {
-            voiceConfig: {
-              prebuiltVoiceConfig: { voiceName },
-            },
+    const ai = this.getClient();
+    // Puck is Male, Kore is Female
+    const voiceName = gender === 'male' ? 'Puck' : 'Kore';
+    const instruction = dialectInstructions[dialect];
+    
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash-preview-tts",
+      contents: [{ parts: [{ text: `${instruction}\n\nالنص المطلوب تحويله لصوت: ${text}` }] }],
+      config: {
+        responseModalities: [Modality.AUDIO],
+        speechConfig: {
+          voiceConfig: {
+            prebuiltVoiceConfig: { voiceName },
           },
         },
-      });
-      return response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+      },
     });
+    return response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
   }
 
   // 3. Podcast Generation
   async generatePodcastDialogue(text: string, dialogueType: DialogueType) {
-    return this.withRetry(async (ai, model) => {
-      const systemPrompt = `مهمتك هي تحويل النص المقدم لك بالكامل، فكرة بفكرة، إلى حوار (${dialogueType}). يجب أن تحافظ على جميع المعلومات والتفاصيل والأمثلة الموجودة في النص الأصلي دون أي حذف. تنبيه هام جداً: عند الانتهاء من تحويل كل المحتوى الأصلي، انهِ الحوار مباشرة. لا تقم بإضافة ملخص، ولا تقم بتكرار آخر معلومة قمت بشرحها. هام جداً: استخدم المعرفات الفريدة التالية لتحديد المتحدثين بدقة: استخدم 'EXPERT:' للمتحدث الأول، واستخدم 'LEARNER:' للمتحدث الثاني. لا تخلط الأدوار أبداً. ابدأ الحوار مباشرة.`;
-      
-      const response = await ai.models.generateContent({
-        model: model,
-        contents: text,
-        config: {
-          systemInstruction: systemPrompt
-        }
-      });
-      return response.text;
+    const ai = this.getClient();
+    const systemPrompt = `مهمتك هي تحويل النص المقدم لك بالكامل، فكرة بفكرة، إلى حوار (${dialogueType}). يجب أن تحافظ على جميع المعلومات والتفاصيل والأمثلة الموجودة في النص الأصلي دون أي حذف. تنبيه هام جداً: عند الانتهاء من تحويل كل المحتوى الأصلي، انهِ الحوار مباشرة. لا تقم بإضافة ملخص، ولا تقم بتكرار آخر معلومة قمت بشرحها. هام جداً: استخدم المعرفات الفريدة التالية لتحديد المتحدثين بدقة: استخدم 'EXPERT:' للمتحدث الأول، واستخدم 'LEARNER:' للمتحدث الثاني. لا تخلط الأدوار أبداً. ابدأ الحوار مباشرة.`;
+    
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: text,
+      config: {
+        systemInstruction: systemPrompt
+      }
     });
+    return response.text;
   }
 
   async generateMultiSpeakerTTS(dialogue: string, dialect: Dialect = 'standard') {
-    return this.withRetry(async (ai, model) => {
-      const instruction = dialectInstructions[dialect];
-      const response = await ai.models.generateContent({
-        model: model,
-        contents: [{ parts: [{ text: `${instruction}\n\nالحوار المرفق:\n${dialogue}` }] }],
-        config: {
-          responseModalities: [Modality.AUDIO],
-          speechConfig: {
-            multiSpeakerVoiceConfig: {
-              speakerVoiceConfigs: [
-                { speaker: 'EXPERT', voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Puck' } } },
-                { speaker: 'LEARNER', voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } } }
-              ]
-            }
+    const ai = this.getClient();
+    const instruction = dialectInstructions[dialect];
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash-preview-tts",
+      contents: [{ parts: [{ text: `${instruction}\n\nالحوار المرفق:\n${dialogue}` }] }],
+      config: {
+        responseModalities: [Modality.AUDIO],
+        speechConfig: {
+          multiSpeakerVoiceConfig: {
+            speakerVoiceConfigs: [
+              { speaker: 'EXPERT', voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Puck' } } }, // Expert Male
+              { speaker: 'LEARNER', voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } } }  // Learner Female
+            ]
           }
         }
-      });
-      return response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+      }
     });
+    return response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
   }
 
   // 4. Flashcards
   async generateFlashcards(text: string, count: number) {
-    return this.withRetry(async (ai, model) => {
-      const response = await ai.models.generateContent({
-        model: model,
-        contents: `استخرج أهم ${count} مصطلحات من النص ده واعملهم في شكل (سؤال وإجابة) بتنسيق JSON.
-        النص: ${text}`,
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                term: { type: Type.STRING },
-                definition: { type: Type.STRING }
-              },
-              required: ["term", "definition"]
-            }
+    const ai = this.getClient();
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: `استخرج أهم ${count} مصطلحات من النص ده واعملهم في شكل (سؤال وإجابة) بتنسيق JSON.
+      النص: ${text}`,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              term: { type: Type.STRING },
+              definition: { type: Type.STRING }
+            },
+            required: ["term", "definition"]
           }
         }
-      });
-      return JSON.parse(response.text || '[]');
+      }
     });
+    return JSON.parse(response.text || '[]');
   }
 
   // 5. Lesson Explainer
   async explainLesson(topic: string) {
-    return this.withRetry(async (ai, model) => {
-      const response = await ai.models.generateContent({
-        model: model,
-        contents: `اشرح لي بالتفصيل درس أو فكرة: ${topic}`,
-        config: {
-          systemInstruction: "أنت معلم خبير. قدم شرح مفصل ودقيق ومنسق للموضوع المطلوب باللغة العربية."
-        }
-      });
-      return {
-        text: response.text,
-        sources: []
-      };
+    const ai = this.getClient();
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: `اشرح لي بالتفصيل درس أو فكرة: ${topic}`,
+      config: {
+        tools: [{ googleSearch: {} }],
+        systemInstruction: "أنت معلم خبير. ابحث في يوتيوب وجوجل ومعلوماتك لتقديم شرح مفصل ودقيق ومنسق للموضوع المطلوب باللغة العربية."
+      }
     });
+    return {
+      text: response.text,
+      sources: response.candidates?.[0]?.groundingMetadata?.groundingChunks || []
+    };
   }
 
   // 6. File Analyzer Chat
   async analyzeFileChat(fileData: string, mimeType: string, fileName: string, userPrompt: string, history: ChatMessage[] = []) {
-    return this.withRetry(async (ai, model) => {
-      const contents = history.map(msg => ({
-        role: msg.role,
-        parts: msg.parts
-      }));
+    const ai = this.getClient();
+    
+    // If it's the first message, we include the file.
+    // In subsequent messages, the model should already have the context if we use a chat session.
+    // However, since we are managing history manually in the state for persistence/simplicity,
+    // we can either use the chat API or just send the whole history.
+    
+    const contents = history.map(msg => ({
+      role: msg.role,
+      parts: msg.parts
+    }));
 
-      const currentParts: any[] = [{ text: userPrompt }];
-      if (contents.length === 0) {
-        currentParts.unshift({ inlineData: { data: fileData, mimeType } });
-      }
+    // Add the current message with the file if it's the first one or if we want to ensure context.
+    // For simplicity and reliability in this environment, we'll send the file with the first user message in the history if not present,
+    // or just append the new message.
+    
+    const currentParts: any[] = [{ text: userPrompt }];
+    if (contents.length === 0) {
+      currentParts.unshift({ inlineData: { data: fileData, mimeType } });
+    }
 
-      contents.push({
-        role: 'user',
-        parts: currentParts
-      });
-
-      const response = await ai.models.generateContent({
-        model: model,
-        contents: contents,
-        config: {
-          systemInstruction: `أنت محلل بيانات أكاديمي خبير. اسم الملف المرفق هو: "${fileName}". 
-          مهمتك هي الإجابة على استفسارات المستخدم بناءً على محتوى هذا الملف فقط. 
-          إذا سألك المستخدم عن شيء غير موجود في الملف، أخبره بلباقة أنك تستطيع المساعدة فقط في محتوى الملف المرفق.
-          تحدث دائماً باللغة العربية.`
-        }
-      });
-
-      return response.text;
+    contents.push({
+      role: 'user',
+      parts: currentParts
     });
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: contents,
+      config: {
+        systemInstruction: `أنت محلل بيانات أكاديمي خبير. اسم الملف المرفق هو: "${fileName}". 
+        مهمتك هي الإجابة على استفسارات المستخدم بناءً على محتوى هذا الملف فقط. 
+        إذا سألك المستخدم عن شيء غير موجود في الملف، أخبره بلباقة أنك تستطيع المساعدة فقط في محتوى الملف المرفق.
+        تحدث دائماً باللغة العربية.`
+      }
+    });
+
+    return response.text;
   }
 
   // Live API Connection
   async connectLive(callbacks: any, dialect: Dialect = 'standard', customInstruction?: string) {
-    const key = this.keys[0] || process.env.GEMINI_API_KEY_1 || '';
-    const ai = new GoogleGenAI({ apiKey: key });
+    const ai = this.getClient();
     const instruction = dialectInstructions[dialect];
     const systemInstruction = customInstruction 
       ? `${customInstruction} ${instruction}`
       : `أنت مساعد صوتي ذكي وودود. ${instruction} ساعد المستخدم في أي استفسار تعليمي بطريقة تفاعلية وسريعة.`;
 
     return ai.live.connect({
-      model: 'gemini-2.0-flash-exp',
+      model: 'gemini-2.5-flash-native-audio-preview-12-2025',
       callbacks,
       config: {
         responseModalities: [Modality.AUDIO],
