@@ -43,9 +43,12 @@ export class GeminiService {
         return await fn(ai);
       } catch (error: any) {
         attempts++;
+        console.error(`Attempt ${attempts} failed with key index ${this.currentKeyIndex}:`, error?.message || error);
+        
         // Check if error is related to quota or invalid key
-        const isQuotaError = error?.message?.includes('429') || error?.message?.includes('quota');
-        const isInvalidKey = error?.message?.includes('API_KEY_INVALID') || error?.message?.includes('403');
+        const errorMessage = (error?.message || '').toLowerCase();
+        const isQuotaError = errorMessage.includes('429') || errorMessage.includes('quota') || errorMessage.includes('exhausted');
+        const isInvalidKey = errorMessage.includes('api_key_invalid') || errorMessage.includes('403') || errorMessage.includes('key not valid');
 
         if ((isQuotaError || isInvalidKey) && attempts < maxAttempts) {
           this.rotateKey();
@@ -54,17 +57,17 @@ export class GeminiService {
         throw error;
       }
     }
-    throw new Error("All API keys failed.");
+    throw new Error("All API keys failed or limit exceeded.");
   }
 
   // 1. Assistant with Search
   async askAssistant(prompt: string) {
     return this.withRetry(async (ai) => {
       const response = await ai.models.generateContent({
-        model: 'gemini-3.1-pro-preview',
+        model: 'gemini-3-flash-preview',
         contents: prompt,
         config: {
-       //   tools: [{ googleSearch: {} }],
+          tools: [{ googleSearch: {} }],
           systemInstruction: "أنت مساعد شخصي خبير. مهمتك هي الإجابة على الأسئلة العلمية بدقة بناءً على نتائج البحث. نسق الإجابة لتكون واضحة وشاملة مع ذكر المصادر إن وجدت."
         }
       });
@@ -103,7 +106,7 @@ export class GeminiService {
       const systemPrompt = `مهمتك هي تحويل النص المقدم لك بالكامل، فكرة بفكرة، إلى حوار (${dialogueType}). يجب أن تحافظ على جميع المعلومات والتفاصيل والأمثلة الموجودة في النص الأصلي دون أي حذف. تنبيه هام جداً: عند الانتهاء من تحويل كل المحتوى الأصلي، انهِ الحوار مباشرة. لا تقم بإضافة ملخص، ولا تقم بتكرار آخر معلومة قمت بشرحها. هام جداً: استخدم المعرفات الفريدة التالية لتحديد المتحدثين بدقة: استخدم 'EXPERT:' للمتحدث الأول، واستخدم 'LEARNER:' للمتحدث الثاني. لا تخلط الأدوار أبداً. ابدأ الحوار مباشرة.`;
       
       const response = await ai.models.generateContent({
-        model: 'gemini-1.5-flash', 
+        model: 'gemini-3-flash-preview',
         contents: text,
         config: {
           systemInstruction: systemPrompt
@@ -139,7 +142,7 @@ export class GeminiService {
   async generateFlashcards(text: string, count: number) {
     return this.withRetry(async (ai) => {
       const response = await ai.models.generateContent({
-        model: 'gemini-2.0-flash', 
+        model: 'gemini-3-flash-preview',
         contents: `استخرج أهم ${count} مصطلحات من النص ده واعملهم في شكل (سؤال وإجابة) بتنسيق JSON.
         النص: ${text}`,
         config: {
@@ -165,7 +168,7 @@ export class GeminiService {
   async explainLesson(topic: string) {
     return this.withRetry(async (ai) => {
       const response = await ai.models.generateContent({
-        model: 'gemini-2.0-flash', 
+        model: 'gemini-3-flash-preview',
         contents: `اشرح لي بالتفصيل درس أو فكرة: ${topic}`,
         config: {
           tools: [{ googleSearch: {} }],
@@ -198,7 +201,7 @@ export class GeminiService {
       });
 
       const response = await ai.models.generateContent({
-        model: 'gemini-2.0-flash', 
+        model: 'gemini-3-flash-preview',
         contents: contents,
         config: {
           systemInstruction: `أنت محلل بيانات أكاديمي خبير. اسم الملف المرفق هو: "${fileName}". 
