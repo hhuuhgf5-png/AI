@@ -35,8 +35,15 @@ export class GeminiService {
 
   private async withRetry<T>(fn: (ai: GoogleGenAI, model: string) => Promise<T>, preferredModel: string = 'gemini-1.5-flash'): Promise<T> {
     let attempts = 0;
-    const modelsToTry = [preferredModel, 'gemini-1.5-flash-8b', 'gemini-pro'];
-    const maxAttempts = Math.max(this.keys.length * modelsToTry.length, 3);
+    // Expanded list of models to try, including the most stable and the newest experimental ones
+    const modelsToTry = [
+      preferredModel, 
+      'gemini-1.5-flash-latest', 
+      'gemini-2.0-flash-exp', 
+      'gemini-1.5-pro',
+      'gemini-1.5-pro-latest'
+    ];
+    const maxAttempts = Math.max(this.keys.length * modelsToTry.length, 5);
 
     while (attempts < maxAttempts) {
       const keyIndex = Math.floor(attempts / modelsToTry.length) % (this.keys.length || 1);
@@ -44,27 +51,36 @@ export class GeminiService {
       const currentModel = modelsToTry[modelIndex];
       
       try {
-        const key = this.keys[keyIndex] || process.env.GEMINI_API_KEY_1 || '';
+        // Trim keys to prevent hidden space issues
+        const rawKey = this.keys[keyIndex] || process.env.GEMINI_API_KEY_1 || '';
+        const key = rawKey.trim();
+        
+        if (!key) {
+          attempts++;
+          continue;
+        }
+
+        // Initialize with explicit API version if possible, or default
         const ai = new GoogleGenAI({ apiKey: key });
+        
+        console.log(`Attempting ${attempts + 1}: Model ${currentModel} with Key Index ${keyIndex}`);
         return await fn(ai, currentModel);
       } catch (error: any) {
         attempts++;
-        console.error(`Attempt ${attempts} failed (Model: ${modelsToTry[modelIndex]}, Key Index: ${keyIndex}):`, error?.message || error);
-        
         const errorMessage = (error?.message || '').toLowerCase();
+        console.error(`Attempt ${attempts} failed:`, errorMessage);
+        
         const isQuotaError = errorMessage.includes('429') || errorMessage.includes('quota') || errorMessage.includes('exhausted');
         const isInvalidKey = errorMessage.includes('api_key_invalid') || errorMessage.includes('403') || errorMessage.includes('key not valid');
-        const isNotFoundError = errorMessage.includes('404') || errorMessage.includes('not found');
+        const isNotFoundError = errorMessage.includes('404') || errorMessage.includes('not found') || errorMessage.includes('not supported');
 
         if ((isQuotaError || isInvalidKey || isNotFoundError) && attempts < maxAttempts) {
-          // If it's a 404, we'll naturally try the next model in the next iteration
-          // If it's a quota error, we'll eventually move to the next key after trying all models for this key
           continue;
         }
         throw error;
       }
     }
-    throw new Error("All API keys and models failed.");
+    throw new Error("All API keys and models failed. Please check your API key permissions in Google AI Studio.");
   }
 
   // 1. Assistant with Search
