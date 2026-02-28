@@ -64,7 +64,7 @@ export class GeminiService {
   async askAssistant(prompt: string) {
     return this.withRetry(async (ai) => {
       const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
+        model: 'gemini-1.5-flash',
         contents: prompt,
         config: {
           tools: [{ googleSearch: {} }],
@@ -85,7 +85,7 @@ export class GeminiService {
       const instruction = dialectInstructions[dialect];
       
       const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash-preview-tts",
+        model: "gemini-1.5-flash",
         contents: [{ parts: [{ text: `${instruction}\n\nالنص المطلوب تحويله لصوت: ${text}` }] }],
         config: {
           responseModalities: [Modality.AUDIO],
@@ -106,7 +106,7 @@ export class GeminiService {
       const systemPrompt = `مهمتك هي تحويل النص المقدم لك بالكامل، فكرة بفكرة، إلى حوار (${dialogueType}). يجب أن تحافظ على جميع المعلومات والتفاصيل والأمثلة الموجودة في النص الأصلي دون أي حذف. تنبيه هام جداً: عند الانتهاء من تحويل كل المحتوى الأصلي، انهِ الحوار مباشرة. لا تقم بإضافة ملخص، ولا تقم بتكرار آخر معلومة قمت بشرحها. هام جداً: استخدم المعرفات الفريدة التالية لتحديد المتحدثين بدقة: استخدم 'EXPERT:' للمتحدث الأول، واستخدم 'LEARNER:' للمتحدث الثاني. لا تخلط الأدوار أبداً. ابدأ الحوار مباشرة.`;
       
       const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
+        model: 'gemini-1.5-flash',
         contents: text,
         config: {
           systemInstruction: systemPrompt
@@ -120,7 +120,7 @@ export class GeminiService {
     return this.withRetry(async (ai) => {
       const instruction = dialectInstructions[dialect];
       const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash-preview-tts",
+        model: "gemini-1.5-flash",
         contents: [{ parts: [{ text: `${instruction}\n\nالحوار المرفق:\n${dialogue}` }] }],
         config: {
           responseModalities: [Modality.AUDIO],
@@ -142,7 +142,7 @@ export class GeminiService {
   async generateFlashcards(text: string, count: number) {
     return this.withRetry(async (ai) => {
       const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
+        model: 'gemini-1.5-flash',
         contents: `استخرج أهم ${count} مصطلحات من النص ده واعملهم في شكل (سؤال وإجابة) بتنسيق JSON.
         النص: ${text}`,
         config: {
@@ -168,7 +168,7 @@ export class GeminiService {
   async explainLesson(topic: string) {
     return this.withRetry(async (ai) => {
       const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
+        model: 'gemini-1.5-flash',
         contents: `اشرح لي بالتفصيل درس أو فكرة: ${topic}`,
         config: {
           tools: [{ googleSearch: {} }],
@@ -201,7 +201,7 @@ export class GeminiService {
       });
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
+        model: 'gemini-1.5-flash',
         contents: contents,
         config: {
           systemInstruction: `أنت محلل بيانات أكاديمي خبير. اسم الملف المرفق هو: "${fileName}". 
@@ -224,7 +224,7 @@ export class GeminiService {
       : `أنت مساعد صوتي ذكي وودود. ${instruction} ساعد المستخدم في أي استفسار تعليمي بطريقة تفاعلية وسريعة.`;
 
     return ai.live.connect({
-      model: 'gemini-2.5-flash-native-audio-preview-12-2025',
+      model: 'gemini-2.0-flash-exp',
       callbacks,
       config: {
         responseModalities: [Modality.AUDIO],
