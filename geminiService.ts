@@ -40,54 +40,46 @@ export class GeminiService {
       preferredModel, 
       'gemini-1.5-flash-latest', 
       'gemini-2.0-flash-exp', 
-      'gemini-1.5-pro',
-      'gemini-1.5-pro-latest'
+      'gemini-1.5-pro'
     ];
     
-    // Refresh keys to ensure we have the latest from env
     const currentKeys = [
-      process.env.GEMINI_API_KEY_1 || (import.meta as any).env?.VITE_GEMINI_API_KEY_1 || '',
-      process.env.GEMINI_API_KEY_2 || (import.meta as any).env?.VITE_GEMINI_API_KEY_2 || '',
-      process.env.GEMINI_API_KEY_3 || (import.meta as any).env?.VITE_GEMINI_API_KEY_3 || ''
-    ].filter(k => k !== '').map(k => k.replace(/\s/g, ''));
+      process.env.GEMINI_API_KEY_1,
+      (import.meta as any).env?.VITE_GEMINI_API_KEY_1,
+      process.env.GEMINI_API_KEY_2,
+      (import.meta as any).env?.VITE_GEMINI_API_KEY_2
+    ].filter(k => k && typeof k === 'string' && k.length > 10)
+     .map(k => k.replace(/[^a-zA-Z0-9_-]/g, '')); // Clean ALL non-key characters
 
-    const maxAttempts = Math.max(currentKeys.length * modelsToTry.length, 5);
+    if (currentKeys.length === 0) {
+      throw new Error("لم يتم العثور على مفتاح API في النظام. تأكد من إضافة VITE_GEMINI_API_KEY_1 في Vercel.");
+    }
+
+    const maxAttempts = currentKeys.length * modelsToTry.length * 2; // Try each model with each key for both v1 and v1beta
 
     while (attempts < maxAttempts) {
-      const keyIndex = Math.floor(attempts / modelsToTry.length) % (currentKeys.length || 1);
-      const modelIndex = attempts % modelsToTry.length;
+      const keyIndex = Math.floor(attempts / (modelsToTry.length * 2)) % currentKeys.length;
+      const modelIndex = Math.floor(attempts / 2) % modelsToTry.length;
+      const apiVersion = attempts % 2 === 0 ? 'v1' : 'v1beta';
       const currentModel = modelsToTry[modelIndex];
       
       try {
         const key = currentKeys[keyIndex];
+        const ai = new GoogleGenAI({ apiKey: key, apiVersion: apiVersion as any });
         
-        if (!key || key.length < 10) {
-          attempts++;
-          continue;
-        }
-
-        const ai = new GoogleGenAI({ apiKey: key });
-        
-        // Log for debugging (masked)
-        console.log(`Attempting with Key: ${key.substring(0, 4)}...${key.substring(key.length - 4)} | Model: ${currentModel}`);
-        
+        console.log(`Attempt ${attempts + 1}: Model ${currentModel} | Version ${apiVersion} | Key ${key.substring(0, 5)}...`);
         return await fn(ai, currentModel);
       } catch (error: any) {
         attempts++;
         const errorMessage = (error?.message || '').toLowerCase();
-        console.error(`Attempt ${attempts} failed:`, errorMessage);
         
-        const isQuotaError = errorMessage.includes('429') || errorMessage.includes('quota') || errorMessage.includes('exhausted');
-        const isInvalidKey = errorMessage.includes('api_key_invalid') || errorMessage.includes('403') || errorMessage.includes('key not valid');
-        const isNotFoundError = errorMessage.includes('404') || errorMessage.includes('not found') || errorMessage.includes('not supported');
-
-        if ((isQuotaError || isInvalidKey || isNotFoundError) && attempts < maxAttempts) {
-          continue;
-        }
+        // If it's a fatal error that won't change with retry, we could throw, 
+        // but for now we'll keep trying all combinations.
+        if (attempts < maxAttempts) continue;
         throw error;
       }
     }
-    throw new Error("فشلت جميع المحاولات. يرجى التأكد من نسخ المفتاح بشكل صحيح من Google AI Studio وبدون أي مسافات.");
+    throw new Error("فشلت جميع المحاولات (v1 & v1beta). يرجى التأكد من أن المفتاح من Google AI Studio ومفعل.");
   }
 
   // 1. Assistant with Search
