@@ -33,38 +33,45 @@ export class GeminiService {
     return false;
   }
 
-  private async withRetry<T>(fn: (ai: GoogleGenAI) => Promise<T>): Promise<T> {
+  private async withRetry<T>(fn: (ai: GoogleGenAI, model: string) => Promise<T>, preferredModel: string = 'gemini-1.5-flash'): Promise<T> {
     let attempts = 0;
-    const maxAttempts = Math.max(this.keys.length, 1);
+    const modelsToTry = [preferredModel, 'gemini-1.5-flash-8b', 'gemini-pro'];
+    const maxAttempts = Math.max(this.keys.length * modelsToTry.length, 3);
 
     while (attempts < maxAttempts) {
+      const keyIndex = Math.floor(attempts / modelsToTry.length) % (this.keys.length || 1);
+      const modelIndex = attempts % modelsToTry.length;
+      const currentModel = modelsToTry[modelIndex];
+      
       try {
-        const ai = this.getClient();
-        return await fn(ai);
+        const key = this.keys[keyIndex] || process.env.GEMINI_API_KEY_1 || '';
+        const ai = new GoogleGenAI({ apiKey: key });
+        return await fn(ai, currentModel);
       } catch (error: any) {
         attempts++;
-        console.error(`Attempt ${attempts} failed with key index ${this.currentKeyIndex}:`, error?.message || error);
+        console.error(`Attempt ${attempts} failed (Model: ${modelsToTry[modelIndex]}, Key Index: ${keyIndex}):`, error?.message || error);
         
-        // Check if error is related to quota or invalid key
         const errorMessage = (error?.message || '').toLowerCase();
         const isQuotaError = errorMessage.includes('429') || errorMessage.includes('quota') || errorMessage.includes('exhausted');
         const isInvalidKey = errorMessage.includes('api_key_invalid') || errorMessage.includes('403') || errorMessage.includes('key not valid');
+        const isNotFoundError = errorMessage.includes('404') || errorMessage.includes('not found');
 
-        if ((isQuotaError || isInvalidKey) && attempts < maxAttempts) {
-          this.rotateKey();
+        if ((isQuotaError || isInvalidKey || isNotFoundError) && attempts < maxAttempts) {
+          // If it's a 404, we'll naturally try the next model in the next iteration
+          // If it's a quota error, we'll eventually move to the next key after trying all models for this key
           continue;
         }
         throw error;
       }
     }
-    throw new Error("All API keys failed or limit exceeded.");
+    throw new Error("All API keys and models failed.");
   }
 
   // 1. Assistant with Search
   async askAssistant(prompt: string) {
-    return this.withRetry(async (ai) => {
+    return this.withRetry(async (ai, model) => {
       const response = await ai.models.generateContent({
-        model: 'gemini-1.5-flash',
+        model: model,
         contents: prompt,
         config: {
           systemInstruction: "أنت مساعد شخصي خبير. مهمتك هي الإجابة على الأسئلة العلمية بدقة. نسق الإجابة لتكون واضحة وشاملة."
@@ -79,12 +86,12 @@ export class GeminiService {
 
   // 2. Simple TTS
   async generateTTS(text: string, gender: VoiceGender, dialect: Dialect = 'standard') {
-    return this.withRetry(async (ai) => {
+    return this.withRetry(async (ai, model) => {
       const voiceName = gender === 'male' ? 'Puck' : 'Kore';
       const instruction = dialectInstructions[dialect];
       
       const response = await ai.models.generateContent({
-        model: "gemini-1.5-flash",
+        model: model,
         contents: [{ parts: [{ text: `${instruction}\n\nالنص المطلوب تحويله لصوت: ${text}` }] }],
         config: {
           responseModalities: [Modality.AUDIO],
@@ -101,11 +108,11 @@ export class GeminiService {
 
   // 3. Podcast Generation
   async generatePodcastDialogue(text: string, dialogueType: DialogueType) {
-    return this.withRetry(async (ai) => {
+    return this.withRetry(async (ai, model) => {
       const systemPrompt = `مهمتك هي تحويل النص المقدم لك بالكامل، فكرة بفكرة، إلى حوار (${dialogueType}). يجب أن تحافظ على جميع المعلومات والتفاصيل والأمثلة الموجودة في النص الأصلي دون أي حذف. تنبيه هام جداً: عند الانتهاء من تحويل كل المحتوى الأصلي، انهِ الحوار مباشرة. لا تقم بإضافة ملخص، ولا تقم بتكرار آخر معلومة قمت بشرحها. هام جداً: استخدم المعرفات الفريدة التالية لتحديد المتحدثين بدقة: استخدم 'EXPERT:' للمتحدث الأول، واستخدم 'LEARNER:' للمتحدث الثاني. لا تخلط الأدوار أبداً. ابدأ الحوار مباشرة.`;
       
       const response = await ai.models.generateContent({
-        model: 'gemini-1.5-flash',
+        model: model,
         contents: text,
         config: {
           systemInstruction: systemPrompt
@@ -116,10 +123,10 @@ export class GeminiService {
   }
 
   async generateMultiSpeakerTTS(dialogue: string, dialect: Dialect = 'standard') {
-    return this.withRetry(async (ai) => {
+    return this.withRetry(async (ai, model) => {
       const instruction = dialectInstructions[dialect];
       const response = await ai.models.generateContent({
-        model: "gemini-1.5-flash",
+        model: model,
         contents: [{ parts: [{ text: `${instruction}\n\nالحوار المرفق:\n${dialogue}` }] }],
         config: {
           responseModalities: [Modality.AUDIO],
@@ -139,9 +146,9 @@ export class GeminiService {
 
   // 4. Flashcards
   async generateFlashcards(text: string, count: number) {
-    return this.withRetry(async (ai) => {
+    return this.withRetry(async (ai, model) => {
       const response = await ai.models.generateContent({
-        model: 'gemini-1.5-flash',
+        model: model,
         contents: `استخرج أهم ${count} مصطلحات من النص ده واعملهم في شكل (سؤال وإجابة) بتنسيق JSON.
         النص: ${text}`,
         config: {
@@ -165,9 +172,9 @@ export class GeminiService {
 
   // 5. Lesson Explainer
   async explainLesson(topic: string) {
-    return this.withRetry(async (ai) => {
+    return this.withRetry(async (ai, model) => {
       const response = await ai.models.generateContent({
-        model: 'gemini-1.5-flash',
+        model: model,
         contents: `اشرح لي بالتفصيل درس أو فكرة: ${topic}`,
         config: {
           systemInstruction: "أنت معلم خبير. قدم شرح مفصل ودقيق ومنسق للموضوع المطلوب باللغة العربية."
@@ -182,7 +189,7 @@ export class GeminiService {
 
   // 6. File Analyzer Chat
   async analyzeFileChat(fileData: string, mimeType: string, fileName: string, userPrompt: string, history: ChatMessage[] = []) {
-    return this.withRetry(async (ai) => {
+    return this.withRetry(async (ai, model) => {
       const contents = history.map(msg => ({
         role: msg.role,
         parts: msg.parts
@@ -199,7 +206,7 @@ export class GeminiService {
       });
 
       const response = await ai.models.generateContent({
-        model: 'gemini-1.5-flash',
+        model: model,
         contents: contents,
         config: {
           systemInstruction: `أنت محلل بيانات أكاديمي خبير. اسم الملف المرفق هو: "${fileName}". 
@@ -215,14 +222,15 @@ export class GeminiService {
 
   // Live API Connection
   async connectLive(callbacks: any, dialect: Dialect = 'standard', customInstruction?: string) {
-    const ai = this.getClient();
+    const key = this.keys[0] || process.env.GEMINI_API_KEY_1 || '';
+    const ai = new GoogleGenAI({ apiKey: key });
     const instruction = dialectInstructions[dialect];
     const systemInstruction = customInstruction 
       ? `${customInstruction} ${instruction}`
       : `أنت مساعد صوتي ذكي وودود. ${instruction} ساعد المستخدم في أي استفسار تعليمي بطريقة تفاعلية وسريعة.`;
 
     return ai.live.connect({
-      model: 'gemini-1.5-flash',
+      model: 'gemini-2.0-flash-exp',
       callbacks,
       config: {
         responseModalities: [Modality.AUDIO],
