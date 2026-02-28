@@ -61,7 +61,7 @@ export class GeminiService {
   async askAssistant(prompt: string) {
     return this.withRetry(async (ai) => {
       const response = await ai.models.generateContent({
-        model: 'gemini-2.0-flash',
+        model: 'gemini-1.5-flash',
         contents: prompt,
         config: {
        //   tools: [{ googleSearch: {} }],
@@ -103,7 +103,7 @@ export class GeminiService {
       const systemPrompt = `مهمتك هي تحويل النص المقدم لك بالكامل، فكرة بفكرة، إلى حوار (${dialogueType}). يجب أن تحافظ على جميع المعلومات والتفاصيل والأمثلة الموجودة في النص الأصلي دون أي حذف. تنبيه هام جداً: عند الانتهاء من تحويل كل المحتوى الأصلي، انهِ الحوار مباشرة. لا تقم بإضافة ملخص، ولا تقم بتكرار آخر معلومة قمت بشرحها. هام جداً: استخدم المعرفات الفريدة التالية لتحديد المتحدثين بدقة: استخدم 'EXPERT:' للمتحدث الأول، واستخدم 'LEARNER:' للمتحدث الثاني. لا تخلط الأدوار أبداً. ابدأ الحوار مباشرة.`;
       
       const response = await ai.models.generateContent({
-        model: 'gemini-2.0-flash', 
+        model: 'gemini-1.5-flash', 
         contents: text,
         config: {
           systemInstruction: systemPrompt
