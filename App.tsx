@@ -14,6 +14,7 @@ const App: React.FC = () => {
   const [loadingMessage, setLoadingMessage] = useState('جاري المعالجة...');
   const [error, setError] = useState<string | null>(null);
   const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [showToast, setShowToast] = useState(() => !localStorage.getItem('firstVisitToast'));
   const [selectedDialect, setSelectedDialect] = useState<Dialect>('standard');
   
   // States for tools
@@ -56,7 +57,18 @@ const App: React.FC = () => {
   const outputAudioContextRef = useRef<AudioContext | null>(null);
   const sourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
   const mediaStreamRef = useRef<MediaStream | null>(null);
-  
+
+    useEffect(() => {
+    if (!showToast) return;
+    
+    const timer = setTimeout(() => {
+      setShowToast(false);
+      localStorage.setItem('firstVisitToast', 'true');
+    }, 5000);
+
+    return () => clearTimeout(timer);
+  }, [showToast]);
+
   // PeerJS Initialization
   useEffect(() => {
     const initPeer = () => {
