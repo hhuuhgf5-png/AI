@@ -24,47 +24,54 @@ const Layout: React.FC<LayoutProps> = ({ children, activeFeature, setActiveFeatu
   return (
     <div className="min-h-screen bg-[#050505] text-[#F5F5F5] flex flex-col" dir="rtl">
       {/* Header */}
-      <header className={`sticky top-0 z-40 transition-all duration-700 ${
-        scrolled ? 'bg-black/40 backdrop-blur-3xl border-b border-white/5 py-4' : 'bg-transparent py-8'
-      }`}>
-        <div className="max-w-7xl mx-auto px-6 md:px-12 flex items-center justify-between">
-          <div className="flex items-center gap-8">
-            <button 
-              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-              className="w-14 h-14 flex items-center justify-center bg-white/5 hover:bg-white hover:text-black active:scale-90 rounded-2xl transition-all text-white/40 border border-white/10 shadow-xl"
-            >
-              <i className="fa-solid fa-bars-staggered text-xl"></i>
-            </button>
-            <div 
-              className="flex items-center gap-4 cursor-pointer group" 
-              onClick={() => setActiveFeature('home')}
-            >
-              <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center shadow-[0_20px_40px_rgba(255,255,255,0.1)] group-hover:scale-110 transition-all duration-700">
-                <i className="fa-solid fa-graduation-cap text-black text-2xl"></i>
-              </div>
-              <div className="flex flex-col">
-                <h1 className="text-2xl md:text-3xl font-black text-white tracking-tighter hidden sm:block font-serif italic leading-none">
-                  الـ<span className="text-indigo-500">منصة</span>
-                </h1>
-                <span className="text-[9px] text-white/20 font-black uppercase tracking-[0.3em] mt-2 hidden sm:block">الذكاء الاصطناعي التعليمي</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-6">
-            <button 
-              onClick={() => setActiveFeature('live')}
-              className="flex items-center gap-4 bg-white/5 text-white border border-white/10 px-8 py-4 rounded-2xl font-black hover:bg-white hover:text-black transition-all active:scale-95 text-xs tracking-widest uppercase shadow-2xl backdrop-blur-xl"
-            >
-              <i className="fa-solid fa-microphone-lines text-indigo-400"></i>
-              <span className="hidden md:inline">محادثة فورية</span>
-            </button>
-            <div className="w-14 h-14 rounded-2xl bg-white/5 overflow-hidden border border-white/10 shadow-2xl p-1">
-              <img src="https://picsum.photos/seed/user/100/100" alt="User" referrerPolicy="no-referrer" className="w-full h-full object-cover rounded-xl opacity-80 hover:opacity-100 transition-opacity" />
-            </div>
-          </div>
+      <header
+  className={`sticky top-0 z-40 transition-all duration-700 ${scrolled ? 'bg-black/40 backdrop-blur-3xl border-b border-white/5 py-2' : 'bg-transparent py-3'}`}
+  style={{ minWidth: 0 }}
+>
+  <div className="max-w-7xl mx-auto px-3 sm:px-6 flex flex-col sm:flex-row items-center justify-between w-full gap-3 sm:gap-0">
+    {/* اليسار: زر القائمة مع شعار */}
+    <div className="flex flex-row items-center gap-4 w-full sm:w-auto">
+      <button
+        onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+        className="w-12 h-12 flex items-center justify-center bg-white/5 hover:bg-white hover:text-black active:scale-90 rounded-xl transition-all text-white/40 border border-white/10 shadow-xl"
+      >
+        <i className="fa-solid fa-bars-staggered text-lg"></i>
+      </button>
+      <div
+        className="flex items-center gap-2 cursor-pointer group"
+        onClick={() => setActiveFeature('home')}
+      >
+        <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center shadow-[0_8px_16px_rgba(255,255,255,0.08)] group-hover:scale-110 transition-all duration-700">
+          <i className="fa-solid fa-graduation-cap text-black text-lg"></i>
         </div>
-      </header>
+        <div className="flex flex-col">
+          <h1 className="text-lg sm:text-2xl font-black text-white tracking-tighter font-serif italic leading-none">
+            الـ<span className="text-indigo-500">منصة</span>
+          </h1>
+          <span className="text-[8px] text-white/20 font-black uppercase tracking-[0.2em] mt-1 sm:mt-2">الذكاء الاصطناعي التعليمي</span>
+        </div>
+      </div>
+    </div>
+    {/* اليمين: زر المحادثة وصورة المستخدم */}
+    <div className="flex flex-row items-center gap-2 sm:gap-6 w-full sm:w-auto justify-end">
+      <button
+        onClick={() => setActiveFeature('live')}
+        className="flex items-center gap-2 sm:gap-4 bg-white/5 text-white border border-white/10 px-6 sm:px-8 py-3 rounded-xl font-black hover:bg-white hover:text-black transition-all active:scale-95 text-[11px] sm:text-xs"
+      >
+        <i className="fa-solid fa-microphone-lines text-indigo-400"></i>
+        <span className="hidden sm:inline">محادثة فورية</span>
+      </button>
+      <div className="w-11 h-11 sm:w-14 sm:h-14 rounded-xl bg-white/5 overflow-hidden border border-white/10 shadow-xl p-[2px]">
+        <img
+          src="https://picsum.photos/seed/user/100/100"
+          alt="User"
+          referrerPolicy="no-referrer"
+          className="w-full h-full object-cover rounded-xl opacity-80 hover:opacity-100 transition-opacity"
+        />
+      </div>
+    </div>
+  </div>
+</header>
 
       {/* Sidebar / Drawer */}
       {isSidebarOpen && (
