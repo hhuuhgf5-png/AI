@@ -631,6 +631,36 @@ const App: React.FC = () => {
   };
 
   return (
+          <AnimatePresence>
+        {showToast && (
+          <motion.div
+            initial={{ y: -80, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: -80, opacity: 0 }}
+            transition={{ duration: 0.6, ease: "easeOut" }}
+            style={{
+              position: "fixed",
+              top: "20px",
+              left: "50%",
+              transform: "translateX(-50%)",
+              backgroundColor: "#111",
+              color: "#fff",
+              padding: "16px 24px",
+              borderRadius: "12px",
+              zIndex: 9999,
+              maxWidth: "90%",
+              textAlign: "center",
+              boxShadow: "0 10px 30px rgba(0,0,0,0.4)",
+              fontSize: "14px",
+              lineHeight: "1.6",
+            }}
+          >
+            مرحبًا، هذي هي النسخه الاولى من الموقع، قريبًا سوف يتم تحديث الموقع بالكامل،
+            إذا وجدت مشكله في الموقع، برجاء التواصل معنا، شكرًا لكم
+          </motion.div>
+        )}
+      </AnimatePresence>
+
     <Layout 
       activeFeature={activeFeature} 
       setActiveFeature={(feat) => {
