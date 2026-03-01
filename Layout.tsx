@@ -28,40 +28,42 @@ const Layout: React.FC<LayoutProps> = ({ children, activeFeature, setActiveFeatu
   className={`sticky top-0 z-40 transition-all duration-700 ${scrolled ? 'bg-black/40 backdrop-blur-3xl border-b border-white/5 py-2' : 'bg-transparent py-3'}`}
   style={{ minWidth: 0 }}
 >
-  <div className="max-w-7xl mx-auto px-3 sm:px-6 flex flex-col sm:flex-row items-center justify-between w-full gap-3 sm:gap-0">
+  <div className="max-w-7xl mx-auto px-2 sm:px-6 flex flex-row items-center justify-between w-full">
+    
     {/* اليسار: زر القائمة مع شعار */}
-    <div className="flex flex-row items-center gap-4 w-full sm:w-auto">
+    <div className="flex flex-row items-center gap-2 sm:gap-4">
       <button
         onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-        className="w-12 h-12 flex items-center justify-center bg-white/5 hover:bg-white hover:text-black active:scale-90 rounded-xl transition-all text-white/40 border border-white/10 shadow-xl"
+        className="w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center bg-white/5 hover:bg-white hover:text-black active:scale-90 rounded-xl transition-all text-white/40 border border-white/10 shadow-xl"
       >
-        <i className="fa-solid fa-bars-staggered text-lg"></i>
+        <i className="fa-solid fa-bars-staggered text-sm sm:text-lg"></i>
       </button>
       <div
         className="flex items-center gap-2 cursor-pointer group"
         onClick={() => setActiveFeature('home')}
       >
-        <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center shadow-[0_8px_16px_rgba(255,255,255,0.08)] group-hover:scale-110 transition-all duration-700">
-          <i className="fa-solid fa-graduation-cap text-black text-lg"></i>
+        <div className="w-10 h-10 sm:w-12 sm:h-12 bg-white rounded-xl flex items-center justify-center shadow-[0_8px_16px_rgba(255,255,255,0.08)] group-hover:scale-110 transition-all duration-700">
+          <i className="fa-solid fa-graduation-cap text-black text-sm sm:text-lg"></i>
         </div>
         <div className="flex flex-col">
-          <h1 className="text-lg sm:text-2xl font-black text-white tracking-tighter font-serif italic leading-none">
+          <h1 className="text-sm sm:text-2xl font-black text-white tracking-tighter font-serif italic leading-none">
             الـ<span className="text-indigo-500">منصة</span>
           </h1>
-          <span className="text-[8px] text-white/20 font-black uppercase tracking-[0.2em] mt-1 sm:mt-2">الذكاء الاصطناعي التعليمي</span>
+          <span className="hidden sm:block text-[8px] text-white/20 font-black uppercase tracking-[0.2em] mt-1 sm:mt-2">الذكاء الاصطناعي التعليمي</span>
         </div>
       </div>
     </div>
+
     {/* اليمين: زر المحادثة وصورة المستخدم */}
-    <div className="flex flex-row items-center gap-2 sm:gap-6 w-full sm:w-auto justify-end">
+    <div className="flex flex-row items-center gap-2 sm:gap-6 justify-end">
       <button
         onClick={() => setActiveFeature('live')}
-        className="flex items-center gap-2 sm:gap-4 bg-white/5 text-white border border-white/10 px-6 sm:px-8 py-3 rounded-xl font-black hover:bg-white hover:text-black transition-all active:scale-95 text-[11px] sm:text-xs"
+        className="flex items-center justify-center sm:px-8 sm:py-3 w-10 h-10 sm:w-auto sm:h-auto bg-white/5 text-white border border-white/10 rounded-xl font-black hover:bg-white hover:text-black transition-all active:scale-95 text-[11px] sm:text-xs"
       >
         <i className="fa-solid fa-microphone-lines text-indigo-400"></i>
-        <span className="hidden sm:inline">محادثة فورية</span>
+        <span className="hidden sm:inline mr-2">محادثة فورية</span>
       </button>
-      <div className="w-11 h-11 sm:w-14 sm:h-14 rounded-xl bg-white/5 overflow-hidden border border-white/10 shadow-xl p-[2px]">
+      <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-xl bg-white/5 overflow-hidden border border-white/10 shadow-xl p-[1px] sm:p-[2px]">
         <img
           src="https://picsum.photos/seed/user/100/100"
           alt="User"
@@ -70,8 +72,10 @@ const Layout: React.FC<LayoutProps> = ({ children, activeFeature, setActiveFeatu
         />
       </div>
     </div>
+
   </div>
 </header>
+
 
       {/* Sidebar / Drawer */}
       {isSidebarOpen && (
