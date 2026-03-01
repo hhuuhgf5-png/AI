@@ -20,7 +20,7 @@ export class GeminiService {
   async askAssistant(prompt: string) {
     const ai = this.getClient();
     const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+      model: 'gemini-2.5-flash',
       contents: prompt,
       config: {
         tools: [{ googleSearch: {} }],
