@@ -18,7 +18,7 @@ body {
   background-color: var(--bg);
   color: var(--ink);
   overflow-x: hidden;
-      background-color: #0f172a;
+  background-color: #0f172a;
   background-image: 
     radial-gradient(circle at 50% 30%, rgba(71, 85, 105, 0.4) 0%, transparent 60%),
     radial-gradient(circle at 50% 100%, rgba(30, 41, 59, 0.6) 0%, transparent 60%);
