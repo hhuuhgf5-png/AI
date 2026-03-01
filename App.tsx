@@ -631,6 +631,7 @@ const App: React.FC = () => {
   };
 
   return (
+    <>
           <AnimatePresence>
         {showToast && (
           <motion.div
@@ -1508,6 +1509,7 @@ const App: React.FC = () => {
         </div>
       )}
     </Layout>
+      </>
   );
 };
 
