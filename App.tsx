@@ -9,6 +9,7 @@ import AudioPlayer from './/AudioPlayer';
 import { createPcmBlob, decode, decodeAudioData, blobToBase64 } from './audioUtils';
 
 const App: React.FC = () => {
+  const hasFetched = useRef(false);
   const [activeFeature, setActiveFeature] = useState('home');
   const [loading, setLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState('جاري المعالجة...');
