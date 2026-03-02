@@ -79,7 +79,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ base64Data, autoPlay = false 
   };
 
   return (
-    <div className="bg-white/[0.02] p-8 rounded-[2.5rem] border border-white/10 shadow-2xl w-full mt-6 space-y-6 backdrop-blur-3xl animate-fadeIn">
+    <div className="bg-white/[0.02] p-4 sm:p-8 rounded-3xl sm:rounded-[2.5rem] border border-white/10 shadow-2xl w-full mt-6 space-y-6 backdrop-blur-3xl animate-fadeIn h-auto">
       {audioUrl && (
         <audio
           ref={audioRef}
@@ -133,19 +133,21 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ base64Data, autoPlay = false 
         <div className="contents md:flex md:items-center md:gap-3">
           <button 
             onClick={handleDownload}
-            className="bg-white/5 border border-white/10 text-white/40 h-14 md:h-12 w-full md:w-12 flex items-center justify-center rounded-2xl text-sm font-bold hover:bg-white/10 hover:text-white active:scale-90 transition-all gap-3"
+            className="bg-white/5 border border-white/10 text-white/40 p-3 md:h-12 w-full md:w-12 flex flex-col md:flex-row items-center justify-center rounded-xl md:rounded-2xl text-[10px] md:text-sm font-bold hover:bg-white/10 hover:text-white active:scale-90 transition-all gap-1 md:gap-3"
             title="تحميل الملف"
           >
-            <i className="fa-solid fa-download"></i>
-            <span className="md:hidden text-[10px] font-black uppercase tracking-widest">تحميل</span>
+            <i className="fa-solid fa-download text-sm"></i>
+            <span className="md:hidden font-black uppercase tracking-tight">تحميل</span>
           </button>
           <button 
             onClick={changeSpeed}
-            className="bg-white/5 border border-white/10 text-white/40 h-14 md:h-12 w-full px-4 flex items-center justify-center rounded-2xl text-[10px] font-black hover:bg-white/10 hover:text-white active:scale-95 transition-all gap-3 uppercase tracking-widest"
+            className="bg-white/5 border border-white/10 text-white/40 p-3 md:h-12 w-full flex flex-col md:flex-row items-center justify-center rounded-xl md:rounded-2xl text-[10px] md:text-xs font-black hover:bg-white/10 hover:text-white active:scale-95 transition-all gap-1 md:gap-3 uppercase tracking-tight"
           >
-            <i className="fa-solid fa-gauge-high text-xs"></i>
-            {playbackRate}x
-            <span className="md:hidden">سرعة التشغيل</span>
+            <div className="flex items-center gap-1">
+              <i className="fa-solid fa-gauge-high text-xs"></i>
+              <span>{playbackRate}x</span>
+            </div>
+            <span className="md:hidden">السرعة</span>
           </button>
         </div>
       </div>
