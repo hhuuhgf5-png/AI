@@ -1550,9 +1550,14 @@ const FlashcardViewer: React.FC<{ cards: Flashcard[] }> = ({ cards }) => {
 
   return (
     <div className="space-y-10">
-      <div className="relative h-80 md:h-96 w-full cursor-pointer perspective-2000" onClick={() => setFlipped(!flipped)}>
-        <div className={`absolute inset-0 w-full h-full transition-all duration-1000 transform-style-3d ${flipped ? 'rotate-y-180' : ''}`}>
-          <div className="absolute inset-0 backface-hidden bg-white/[0.03] border border-white/10 rounded-3xl md:rounded-[4rem] flex flex-col items-center justify-center p-8 md:p-12 text-center shadow-2xl backdrop-blur-xl overflow-hidden">
+      <div className="relative h-80 md:h-96 w-full cursor-pointer [perspective:1000px]" onClick={() => setFlipped(!flipped)}>
+        <motion.div
+          className="relative w-full h-full [transform-style:preserve-3d]"
+          animate={{ rotateY: flipped ? 180 : 0 }}
+          transition={{ duration: 0.6, ease: "easeInOut" }}
+        >
+          {/* Front Face */}
+          <div className="absolute inset-0 w-full h-full [backface-visibility:hidden] bg-white/[0.03] border border-white/10 rounded-3xl md:rounded-[4rem] flex flex-col items-center justify-center p-8 md:p-12 text-center shadow-2xl backdrop-blur-xl overflow-hidden">
             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-indigo-500/50 to-transparent"></div>
             <span className="text-[10px] font-black text-white/20 mb-6 md:mb-10 uppercase tracking-[0.4em]">المصطلح / السؤال</span>
             <h4 className="text-2xl md:text-4xl font-black text-white leading-tight font-serif italic">{card.term}</h4>
@@ -1560,7 +1565,8 @@ const FlashcardViewer: React.FC<{ cards: Flashcard[] }> = ({ cards }) => {
               <i className="fa-solid fa-sync"></i> انقر لرؤية الإجابة
             </div>
           </div>
-          <div className="absolute inset-0 backface-hidden bg-white text-black rounded-3xl md:rounded-[4rem] flex flex-col items-center justify-center p-8 md:p-12 text-center shadow-2xl rotate-y-180 overflow-hidden">
+          {/* Back Face */}
+          <div className="absolute inset-0 w-full h-full [backface-visibility:hidden] [transform:rotateY(180deg)] bg-white text-black rounded-3xl md:rounded-[4rem] flex flex-col items-center justify-center p-8 md:p-12 text-center shadow-2xl overflow-hidden">
             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-indigo-500 to-transparent opacity-20"></div>
             <span className="text-[10px] font-black text-black/20 mb-6 md:mb-10 uppercase tracking-[0.4em]">التفسير / الإجابة</span>
             <p className="text-xl md:text-2xl leading-relaxed font-bold">{card.definition}</p>
@@ -1568,7 +1574,7 @@ const FlashcardViewer: React.FC<{ cards: Flashcard[] }> = ({ cards }) => {
               <i className="fa-solid fa-sync"></i> انقر للعودة للسؤال
             </div>
           </div>
-        </div>
+        </motion.div>
       </div>
       <div className="flex items-center justify-between px-6 md:px-12 bg-white/[0.02] p-6 md:p-8 rounded-3xl md:rounded-[3rem] border border-white/5 shadow-2xl">
         <button disabled={currentIndex === 0} onClick={() => { setCurrentIndex(v => v - 1); setFlipped(false); }} className="px-6 md:px-10 py-3 md:py-4 rounded-xl md:rounded-2xl font-black text-white/40 hover:text-white hover:bg-white/5 active:scale-95 disabled:opacity-5 transition-all uppercase tracking-widest text-[10px]">السابق</button>
