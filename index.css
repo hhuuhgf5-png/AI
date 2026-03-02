@@ -84,6 +84,24 @@ body {
   background: rgba(255, 255, 255, 0.2);
 }
 
+/* 3D Flip Effects */
+.perspective-2000 {
+  perspective: 2000px;
+}
+
+.transform-style-3d {
+  transform-style: preserve-3d;
+}
+
+.backface-hidden {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.rotate-y-180 {
+  transform: rotateY(180deg);
+}
+
 /* RTL Adjustments */
 [dir="rtl"] .fa-chevron-right {
   transform: rotate(180deg);
