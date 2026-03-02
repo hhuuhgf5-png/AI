@@ -1544,37 +1544,33 @@ const SectionHeader: React.FC<{ title: string, icon: string, onBack: () => void 
 );
 
 const FlashcardViewer: React.FC<{ cards: Flashcard[] }> = ({ cards }) => {
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [flipped, setFlipped] = useState(false);
-  const card = cards[currentIndex];
+  const [flippedCards, setFlippedCards] = useState<Record<number, boolean>>({});
+
+  useEffect(() => {
+    setFlippedCards({});
+  }, [cards]);
+
+  const handleFlip = (index: number) => {
+    setFlippedCards(prev => ({ ...prev, [index]: !prev[index] }));
+  };
 
   return (
-    <div className="space-y-10">
-      <div className="relative h-80 md:h-96 w-full cursor-pointer perspective-2000" onClick={() => setFlipped(!flipped)}>
-        <div className={`absolute inset-0 w-full h-full transition-all duration-1000 transform-style-3d ${flipped ? 'rotate-y-180' : ''}`}>
-          <div className="absolute inset-0 backface-hidden bg-white/[0.03] border border-white/10 rounded-3xl md:rounded-[4rem] flex flex-col items-center justify-center p-8 md:p-12 text-center shadow-2xl backdrop-blur-xl overflow-hidden">
-            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-indigo-500/50 to-transparent"></div>
-            <span className="text-[10px] font-black text-white/20 mb-6 md:mb-10 uppercase tracking-[0.4em]">المصطلح / السؤال</span>
-            <h4 className="text-2xl md:text-4xl font-black text-white leading-tight font-serif italic">{card.term}</h4>
-            <div className="mt-8 md:mt-12 flex items-center gap-3 text-white/10 text-[10px] font-black uppercase tracking-widest animate-pulse">
-              <i className="fa-solid fa-sync"></i> انقر لرؤية الإجابة
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      {cards.map((card, index) => (
+        <div key={index} className="relative w-full h-64 [perspective:1000px] cursor-pointer" onClick={() => handleFlip(index)}>
+          <div className={`w-full h-full transition-all duration-500 [transform-style:preserve-3d] ${flippedCards[index] ? '[transform:rotateY(180deg)]' : ''}`}>
+
+            {/* Front Face (Question) */}
+            <div className="absolute inset-0 w-full h-full [backface-visibility:hidden] bg-gray-800 rounded-xl p-6 flex flex-col items-center justify-center text-center shadow-lg border border-gray-700">
+              <p className="text-xl font-bold text-white">{card.question}</p>
             </div>
-          </div>
-          <div className="absolute inset-0 backface-hidden bg-white text-black rounded-3xl md:rounded-[4rem] flex flex-col items-center justify-center p-8 md:p-12 text-center shadow-2xl rotate-y-180 overflow-hidden">
-            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-indigo-500 to-transparent opacity-20"></div>
-            <span className="text-[10px] font-black text-black/20 mb-6 md:mb-10 uppercase tracking-[0.4em]">التفسير / الإجابة</span>
-            <p className="text-xl md:text-2xl leading-relaxed font-bold">{card.definition}</p>
-            <div className="mt-8 md:mt-12 flex items-center gap-3 text-black/20 text-[10px] font-black uppercase tracking-widest animate-pulse">
-              <i className="fa-solid fa-sync"></i> انقر للعودة للسؤال
+            {/* Back Face (Answer) */}
+            <div className="absolute inset-0 w-full h-full [backface-visibility:hidden] [transform:rotateY(180deg)] bg-blue-900 rounded-xl p-6 flex flex-col items-center justify-center text-center shadow-lg border border-blue-700">
+              <p className="text-lg text-white">{card.answer}</p>
             </div>
           </div>
         </div>
-      </div>
-      <div className="flex items-center justify-between px-6 md:px-12 bg-white/[0.02] p-6 md:p-8 rounded-3xl md:rounded-[3rem] border border-white/5 shadow-2xl">
-        <button disabled={currentIndex === 0} onClick={() => { setCurrentIndex(v => v - 1); setFlipped(false); }} className="px-6 md:px-10 py-3 md:py-4 rounded-xl md:rounded-2xl font-black text-white/40 hover:text-white hover:bg-white/5 active:scale-95 disabled:opacity-5 transition-all uppercase tracking-widest text-[10px]">السابق</button>
-        <span className="font-black text-white/20 tracking-[0.3em] text-[10px] md:text-xs">{currentIndex + 1} / {cards.length}</span>
-        <button disabled={currentIndex === cards.length - 1} onClick={() => { setCurrentIndex(v => v + 1); setFlipped(false); }} className="px-6 md:px-10 py-3 md:py-4 bg-white text-black rounded-xl md:rounded-2xl font-black hover:bg-indigo-50 active:scale-95 disabled:opacity-5 shadow-2xl shadow-white/10 transition-all uppercase tracking-widest text-[10px]">التالي</button>
-      </div>
+      ))}
     </div>
   );
 };

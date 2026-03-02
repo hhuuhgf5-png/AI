@@ -5,8 +5,8 @@ export type VoiceGender = 'male' | 'female';
 export type Dialect = 'standard' | 'egyptian' | 'saudi' | 'lebanese' | 'maghrebi';
 
 export interface Flashcard {
-  term: string;
-  definition: string;
+  question: string;
+  answer: string;
 }
 
 export interface ChatMessage {

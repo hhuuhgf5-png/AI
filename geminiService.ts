@@ -105,10 +105,10 @@ export class GeminiService {
           items: {
             type: Type.OBJECT,
             properties: {
-              term: { type: Type.STRING },
-              definition: { type: Type.STRING }
+              question: { type: Type.STRING },
+              answer: { type: Type.STRING }
             },
-            required: ["term", "definition"]
+            required: ["question", "answer"]
           }
         }
       }
