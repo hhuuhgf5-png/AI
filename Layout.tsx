@@ -84,7 +84,7 @@ const Layout: React.FC<LayoutProps> = ({ children, activeFeature, setActiveFeatu
             className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 transition-opacity duration-500" 
             onClick={() => setIsSidebarOpen(false)}
           />
-          <div className="fixed right-0 top-0 h-full w-full sm:w-96 bg-[#050505] z-[60] shadow-[0_0_100px_rgba(0,0,0,1)] flex flex-col transition-transform duration-500 border-l border-white/10">
+          <div className="fixed right-0 top-0 h-full w-full sm:w-96 bg-[#050505] z-50 shadow-[0_0_100px_rgba(0,0,0,1)] flex flex-col transition-transform duration-500 border-l border-white/10">
             <div className="p-8 md:p-10 flex items-center justify-between border-b border-white/5 bg-white/[0.01]">
               <div className="flex items-center gap-5">
                 <div className="w-12 h-12 bg-white/5 text-indigo-400 rounded-2xl flex items-center justify-center border border-white/10 shadow-xl">
