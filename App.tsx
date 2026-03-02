@@ -1552,22 +1552,17 @@ const FlashcardViewer: React.FC<{ cards: Flashcard[] }> = ({ cards }) => {
     <div className="space-y-10">
       <div className="relative h-80 md:h-96 w-full cursor-pointer perspective-2000" onClick={() => setFlipped(!flipped)}>
         <div className={`absolute inset-0 w-full h-full transition-all duration-1000 transform-style-3d ${flipped ? 'rotate-y-180' : ''}`}>
-          <div className="absolute inset-0 backface-hidden bg-white/[0.03] border border-white/10 rounded-3xl md:rounded-[4rem] flex flex-col items-center justify-center p-8 md:p-12 text-center shadow-2xl backdrop-blur-xl overflow-hidden">
-            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-indigo-500/50 to-transparent"></div>
-            <span className="text-[10px] font-black text-white/20 mb-6 md:mb-10 uppercase tracking-[0.4em]">المصطلح / السؤال</span>
-            <h4 className="text-2xl md:text-4xl font-black text-white leading-tight font-serif italic">{card.term}</h4>
-            <div className="mt-8 md:mt-12 flex items-center gap-3 text-white/10 text-[10px] font-black uppercase tracking-widest animate-pulse">
-              <i className="fa-solid fa-sync"></i> انقر لرؤية الإجابة
-            </div>
+
+          {/* Front Face */}
+          <div className="absolute inset-0 backface-hidden bg-gray-800 rounded-3xl flex flex-col items-center justify-center p-8 text-center shadow-2xl border border-gray-700">
+            <h4 className="text-2xl font-bold text-white">{card.term}</h4>
           </div>
-          <div className="absolute inset-0 backface-hidden bg-white text-black rounded-3xl md:rounded-[4rem] flex flex-col items-center justify-center p-8 md:p-12 text-center shadow-2xl rotate-y-180 overflow-hidden">
-            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-indigo-500 to-transparent opacity-20"></div>
-            <span className="text-[10px] font-black text-black/20 mb-6 md:mb-10 uppercase tracking-[0.4em]">التفسير / الإجابة</span>
-            <p className="text-xl md:text-2xl leading-relaxed font-bold">{card.definition}</p>
-            <div className="mt-8 md:mt-12 flex items-center gap-3 text-black/20 text-[10px] font-black uppercase tracking-widest animate-pulse">
-              <i className="fa-solid fa-sync"></i> انقر للعودة للسؤال
-            </div>
+
+          {/* Back Face (Pre-rotated) */}
+          <div className="absolute inset-0 backface-hidden bg-blue-900 rounded-3xl flex flex-col items-center justify-center p-8 text-center shadow-2xl rotate-y-180 border border-blue-700">
+            <p className="text-xl font-bold text-white">{card.definition}</p>
           </div>
+
         </div>
       </div>
       <div className="flex items-center justify-between px-6 md:px-12 bg-white/[0.02] p-6 md:p-8 rounded-3xl md:rounded-[3rem] border border-white/5 shadow-2xl">
