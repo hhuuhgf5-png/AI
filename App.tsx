@@ -639,7 +639,22 @@ const App: React.FC = () => {
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: -80, opacity: 0 }}
             transition={{ duration: 0.6, ease: "easeOut" }}
-            className="fixed top-2 left-1/2 -translate-x-1/2 bg-[#111]/90 backdrop-blur-md text-white p-3 rounded-xl z-[100] w-[95%] sm:max-w-md text-center shadow-2xl text-xs sm:text-sm leading-relaxed border border-white/10"
+            style={{
+              position: "fixed",
+              top: "20px",
+              left: "50%",
+              transform: "translateX(-50%)",
+              backgroundColor: "#111",
+              color: "#fff",
+              padding: "16px 24px",
+              borderRadius: "12px",
+              zIndex: 9999,
+              maxWidth: "90%",
+              textAlign: "center",
+              boxShadow: "0 10px 30px rgba(0,0,0,0.4)",
+              fontSize: "14px",
+              lineHeight: "1.6",
+            }}
           >
             مرحبًا، هذي هي النسخه الاولى من الموقع، قريبًا سوف يتم تحديث الموقع بالكامل،
             إذا وجدت مشكله في الموقع، برجاء التواصل معنا، شكرًا لكم
@@ -694,7 +709,7 @@ const App: React.FC = () => {
         >
           {/* Error Notification */}
           {error && (
-            <div className="fixed top-24 left-4 right-4 md:left-auto md:right-8 md:w-full md:max-w-sm bg-red-600 text-white p-4 rounded-2xl shadow-2xl z-[100] animate-slideUp flex items-center justify-between border-2 border-white/20">
+            <div className="fixed top-24 left-4 right-4 md:left-auto md:w-96 bg-red-600 text-white p-4 rounded-2xl shadow-2xl z-[60] animate-slideUp flex items-center justify-between border-2 border-white/20">
               <div className="flex items-center gap-3">
                 <i className="fa-solid fa-circle-exclamation text-xl"></i>
                 <span className="text-sm font-bold leading-tight">{error}</span>
@@ -705,7 +720,7 @@ const App: React.FC = () => {
 
           {/* Global Dialect Selector */}
           {activeFeature !== 'home' && activeFeature !== 'flashcards' && activeFeature !== 'group' && (
-            <div className="max-w-2xl mx-auto mb-12 bg-white/[0.03] backdrop-blur-3xl p-5 md:p-8 rounded-3xl border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.3)] flex flex-col md:flex-row items-center justify-between gap-6 sticky top-24 z-10 animate-slideUp">
+            <div className="max-w-2xl mx-auto mb-12 bg-white/[0.03] backdrop-blur-3xl p-5 md:p-8 rounded-[2.5rem] border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.3)] flex flex-col md:flex-row items-center justify-between gap-6 sticky top-24 z-20 animate-slideUp">
               <div className="flex items-center gap-4">
                 <div className="w-10 h-10 bg-indigo-500/10 text-indigo-400 rounded-2xl flex items-center justify-center border border-indigo-500/20 shadow-xl">
                   <i className="fa-solid fa-language text-lg"></i>
@@ -755,7 +770,7 @@ const App: React.FC = () => {
                   </span>
                   مستقبلك يبدأ هنا
                 </motion.div>
-                <h2 className="text-3xl sm:text-6xl md:text-[10vw] font-black text-white leading-[0.85] tracking-tighter font-serif italic mb-10">
+                <h2 className="text-6xl md:text-[10vw] font-black text-white leading-[0.85] tracking-tighter font-serif italic mb-10">
                   تعلم بـ<span className="text-indigo-500">ذكاء</span> <br />
                   <span className="text-white/10">تطور بسرعة</span>
                 </h2>
@@ -955,7 +970,7 @@ const App: React.FC = () => {
       {activeFeature === 'live' && (
         <div className="max-w-4xl mx-auto space-y-10">
           <SectionHeader title="المحادثة الفورية الفاخرة" icon="fa-microphone-lines" onBack={() => setActiveFeature('home')} />
-              <div className="bg-white/[0.02] p-8 sm:p-16 rounded-3xl sm:rounded-[4rem] border border-white/5 shadow-2xl text-center space-y-12 flex flex-col items-center relative overflow-hidden">
+          <div className="bg-white/[0.02] p-16 rounded-[4rem] border border-white/5 shadow-2xl text-center space-y-12 flex flex-col items-center relative overflow-hidden">
             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-indigo-500/50 to-transparent"></div>
             
             <div className={`w-40 h-40 flex items-center justify-center rounded-full transition-all duration-700 border border-white/10 ${liveActive ? 'bg-red-500/10 animate-pulse shadow-[0_0_50px_rgba(239,68,68,0.2)] border-red-500/30' : 'bg-white/5 shadow-inner'}`}>
@@ -1000,7 +1015,7 @@ const App: React.FC = () => {
           <SectionHeader title="المساعد الشخصي الذكي" icon="fa-robot" onBack={() => setActiveFeature('home')} />
           
           <div className="bg-white/[0.02] p-6 md:p-10 rounded-3xl md:rounded-[3rem] border border-white/5 shadow-2xl space-y-10">
-            <form onSubmit={handleAssistant} className="flex flex-col md:flex-row gap-4 bg-white/[0.03] p-3 rounded-2xl md:rounded-[2rem] border border-white/10 shadow-2xl">
+            <form onSubmit={handleAssistant} className="flex flex-col sm:flex-row gap-4 bg-white/[0.03] p-3 rounded-2xl md:rounded-[2rem] border border-white/10 shadow-2xl">
               <input name="prompt" required placeholder="اسأل سؤالك العلمي هنا..." className="flex-1 p-4 outline-none bg-transparent font-medium text-base md:text-lg text-white placeholder:text-white/20" />
               <motion.button 
                 whileHover={{ scale: 1.02 }}
@@ -1052,8 +1067,8 @@ const App: React.FC = () => {
               animate={{ opacity: 1, scale: 1 }}
               className="bg-white/[0.02] p-6 md:p-12 rounded-3xl md:rounded-[3rem] border border-white/5 shadow-2xl space-y-10"
             >
-              <form onSubmit={handleAnalyzer} className="space-y-6 md:space-y-10">
-                <div className="border border-dashed border-white/10 rounded-2xl md:rounded-[2.5rem] p-6 md:p-16 text-center bg-white/[0.03] hover:bg-white/[0.05] transition-all group cursor-pointer relative shadow-inner">
+              <form onSubmit={handleAnalyzer} className="space-y-10">
+                <div className="border border-dashed border-white/10 rounded-2xl md:rounded-[2.5rem] p-8 md:p-16 text-center bg-white/[0.03] hover:bg-white/[0.05] transition-all group cursor-pointer relative shadow-inner">
                   <input 
                     name="file" 
                     type="file" 
@@ -1187,7 +1202,7 @@ const App: React.FC = () => {
               className="w-full bg-white/[0.03] border border-white/10 rounded-2xl md:rounded-[2.5rem] p-6 md:p-10 text-white outline-none focus:border-indigo-500/50 transition-all duration-500 resize-none text-lg md:text-xl font-medium placeholder:text-white/10 shadow-inner" 
               placeholder="اكتب النص الذي ترغب في سماعه هنا..."
             ></textarea>
-            <div className="flex flex-col sm:flex-row gap-4 md:gap-6">
+            <div className="flex flex-col md:flex-row gap-6">
               <button disabled={loading} onClick={() => {
                 const txt = (document.getElementById('tts-input-area') as HTMLTextAreaElement).value;
                 if(txt) handleTTS(txt, 'male', 'standalone');
@@ -1247,7 +1262,7 @@ const App: React.FC = () => {
               placeholder="أدخل النص لاستخراج البطاقات منه..." 
               className="w-full bg-white/[0.03] border border-white/10 rounded-2xl md:rounded-[2.5rem] p-6 md:p-10 text-white outline-none focus:border-indigo-500/50 transition-all duration-500 resize-none text-lg md:text-xl font-medium placeholder:text-white/10 shadow-inner"
             ></textarea>
-            <div className="flex flex-col md:flex-row gap-6 md:gap-8">
+            <div className="flex flex-col md:flex-row items-center gap-8">
               <div className="flex items-center gap-6 bg-white/[0.03] px-8 py-4 rounded-2xl border border-white/10 shadow-inner w-full md:w-auto justify-between md:justify-start">
                 <label className="text-[10px] font-black text-white/20 uppercase tracking-widest">العدد</label>
                 <input name="count" type="number" defaultValue={5} min={1} max={20} className="w-16 bg-transparent outline-none font-black text-white text-xl text-center" />
@@ -1295,7 +1310,7 @@ const App: React.FC = () => {
 
       {/* Global Loading Overlay */}
       {loading && (
-        <div className="fixed inset-0 bg-black/90 backdrop-blur-2xl flex items-center justify-center z-[110] animate-fadeIn">
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-2xl flex items-center justify-center z-[100] animate-fadeIn">
           <div className="flex flex-col items-center gap-10">
             <div className="relative">
               <div className="w-32 h-32 border-[12px] border-white/5 border-t-indigo-500 rounded-full animate-spin shadow-2xl"></div>
@@ -1312,7 +1327,7 @@ const App: React.FC = () => {
       )}
       {/* Floating Chat & Call UI */}
       {session.connected && (
-        <div className="fixed bottom-10 left-10 z-40 flex flex-col items-end gap-6">
+        <div className="fixed bottom-10 left-10 z-[100] flex flex-col items-end gap-6">
           <audio ref={remoteAudioRef} autoPlay className="hidden" />
           
           <AnimatePresence>
@@ -1420,7 +1435,7 @@ const App: React.FC = () => {
                 initial={{ opacity: 0, scale: 0.9, y: 20 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.9, y: 20 }}
-                className="fixed inset-4 sm:inset-auto sm:bottom-28 sm:left-10 sm:w-96 sm:h-[550px] bg-black/95 backdrop-blur-3xl rounded-3xl sm:rounded-[3rem] shadow-2xl border border-white/10 flex flex-col overflow-hidden z-[100]"
+                className="w-96 h-[550px] bg-black/95 backdrop-blur-3xl rounded-[3rem] shadow-2xl border border-white/10 flex flex-col overflow-hidden"
               >
                 <div className="bg-white/5 p-8 text-white flex items-center justify-between border-b border-white/5">
                   <div className="flex items-center gap-4">
@@ -1530,15 +1545,15 @@ const FeatureCard: React.FC<{ title: string, desc: string, icon: string, color: 
 );
 
 const SectionHeader: React.FC<{ title: string, icon: string, onBack: () => void }> = ({ title, icon, onBack }) => (
-  <div className="flex items-center gap-4 sm:gap-6 md:gap-8 bg-white/[0.03] backdrop-blur-3xl p-4 sm:p-6 md:p-10 rounded-2xl sm:rounded-3xl md:rounded-[3.5rem] border border-white/10 shadow-[0_30px_60px_rgba(0,0,0,0.5)] mb-8 sm:mb-12 md:mb-20 animate-slideUp">
-    <button onClick={onBack} className="w-10 h-10 sm:w-12 sm:h-12 md:w-16 md:h-16 flex items-center justify-center bg-white/5 hover:bg-white hover:text-black active:scale-90 rounded-xl sm:rounded-2xl md:rounded-3xl transition-all text-white/40 border border-white/10 shadow-xl">
-      <i className="fa-solid fa-arrow-right text-lg sm:text-xl md:text-2xl"></i>
+  <div className="flex items-center gap-6 md:gap-8 bg-white/[0.03] backdrop-blur-3xl p-6 md:p-10 rounded-3xl md:rounded-[3.5rem] border border-white/10 shadow-[0_30px_60px_rgba(0,0,0,0.5)] mb-12 md:mb-20 animate-slideUp">
+    <button onClick={onBack} className="w-12 h-12 md:w-16 md:h-16 flex items-center justify-center bg-white/5 hover:bg-white hover:text-black active:scale-90 rounded-2xl md:rounded-3xl transition-all text-white/40 border border-white/10 shadow-xl">
+      <i className="fa-solid fa-arrow-right text-xl md:text-2xl"></i>
     </button>
-    <div className="flex items-center gap-3 sm:gap-4 md:gap-6">
-      <div className="w-10 h-10 sm:w-12 sm:h-12 md:w-20 md:h-20 bg-white text-black rounded-xl sm:rounded-2xl md:rounded-[2rem] flex items-center justify-center shadow-2xl">
-        <i className={`fa-solid ${icon} text-lg sm:text-xl md:text-3xl`}></i>
+    <div className="flex items-center gap-4 md:gap-6">
+      <div className="w-12 h-12 md:w-20 md:h-20 bg-white text-black rounded-2xl md:rounded-[2rem] flex items-center justify-center shadow-2xl">
+        <i className={`fa-solid ${icon} text-xl md:text-3xl`}></i>
       </div>
-      <h2 className="text-xl sm:text-2xl md:text-5xl font-black text-white font-serif italic tracking-tighter">{title}</h2>
+      <h2 className="text-2xl md:text-5xl font-black text-white font-serif italic tracking-tighter">{title}</h2>
     </div>
   </div>
 );
