@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { HistoryItem } from '../types';
+import { HistoryItem } from './types';
 
 interface LayoutProps {
   children: React.ReactNode;
