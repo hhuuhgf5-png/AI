@@ -2,6 +2,8 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import React, { useState, useEffect, useRef } from 'react';
 import { Peer, DataConnection, MediaConnection } from 'peerjs';
+import { auth, provider } from './firebase';
+import { onAuthStateChanged, signInWithPopup, signOut, User } from 'firebase/auth';
 import Layout from './/Layout';
 import { gemini } from './geminiService';
 import { HistoryItem, DialogueType, VoiceGender, Flashcard, Dialect, ChatMessage, SessionState } from './types';
@@ -9,6 +11,8 @@ import AudioPlayer from './/AudioPlayer';
 import { createPcmBlob, decode, decodeAudioData, blobToBase64 } from './audioUtils';
 
 const App: React.FC = () => {
+  const [user, setUser] = useState<User | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
   const [activeFeature, setActiveFeature] = useState('home');
   const [loading, setLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState('جاري المعالجة...');
@@ -52,6 +56,14 @@ const App: React.FC = () => {
   
   // Live API States
   const [liveActive, setLiveActive] = useState(false);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      setAuthLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
   const liveSessionRef = useRef<any>(null);
   const nextStartTimeRef = useRef<number>(0);
   const outputAudioContextRef = useRef<AudioContext | null>(null);
@@ -419,6 +431,22 @@ const App: React.FC = () => {
     cleanupLive();
   };
 
+  const handleLogin = async () => {
+    try {
+      await signInWithPopup(auth, provider);
+    } catch (err) {
+      handleError(err);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+    } catch (err) {
+      handleError(err);
+    }
+  };
+
   // --- Feature Handlers ---
   const handleAssistant = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -630,6 +658,53 @@ const App: React.FC = () => {
     );
   };
 
+  if (authLoading) {
+    return (
+      <div style={{ minHeight: '100vh', backgroundColor: '#050505', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ color: 'white', fontWeight: 'bold' }}>جاري التحميل...</div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div style={{ minHeight: '100vh', backgroundColor: '#050505', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px', textAlign: 'center' }}>
+        <div style={{ marginBottom: '40px' }}>
+          <div style={{ width: '80px', height: '80px', backgroundColor: 'white', borderRadius: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', boxShadow: "0 8px 16px rgba(255,255,255,0.08)" }}>
+            <i className="fa-solid fa-graduation-cap" style={{ fontSize: '40px', color: 'black' }}></i>
+          </div>
+          <h1 style={{ fontSize: '2.5rem', fontWeight: '900', color: 'white', margin: '0', fontStyle: 'italic' }}>
+            الـ<span style={{ color: '#6366f1' }}>منصة</span>
+          </h1>
+          <p style={{ color: 'rgba(255,255,255,0.4)', marginTop: '10px' }}>أهلاً بك في منصة التعلم الذكية</p>
+        </div>
+        <button
+          onClick={handleLogin}
+          style={{
+            backgroundColor: 'white',
+            color: 'black',
+            padding: '16px 32px',
+            borderRadius: '16px',
+            fontWeight: '900',
+            border: 'none',
+            cursor: 'pointer',
+            fontSize: '1rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            transition: 'transform 0.2s',
+            boxShadow: '0 10px 20px rgba(255,255,255,0.1)'
+          }}
+          onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
+          onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
+        >
+          <i className="fa-brands fa-google"></i>
+          تسجيل الدخول بواسطة جوجل
+        </button>
+      </div>
+    );
+  }
+
   return (
     <>
           <AnimatePresence>
@@ -683,6 +758,27 @@ const App: React.FC = () => {
         }
       }}
     >
+      <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: '20px' }}>
+        <button
+          onClick={handleLogout}
+          style={{
+            backgroundColor: 'rgba(255, 255, 255, 0.05)',
+            color: 'rgba(255, 255, 255, 0.6)',
+            padding: '8px 16px',
+            borderRadius: '12px',
+            fontSize: '12px',
+            fontWeight: 'bold',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px'
+          }}
+        >
+          <i className="fa-solid fa-right-from-bracket"></i>
+          تسجيل الخروج
+        </button>
+      </div>
       <AnimatePresence mode="wait">
         <motion.div
           key={activeFeature}
