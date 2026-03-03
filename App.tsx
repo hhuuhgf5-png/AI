@@ -723,6 +723,7 @@ const App: React.FC = () => {
       </AnimatePresence>
 
     <Layout 
+      user={user}
       activeFeature={activeFeature} 
       setActiveFeature={(feat) => {
         if (liveActive) stopLiveConversation();
