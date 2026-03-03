@@ -88,7 +88,10 @@ const UserStatsCard: React.FC<UserStatsCardProps> = ({ user }) => {
   const showCountdown = userData.questionsLeft === 0 || userData.audioMinutesLeft === 0;
 
   return (
-    <div className="w-full max-w-7xl mx-auto px-6 md:px-12 mt-4 animate-fadeIn">
+    <div
+      className="w-full max-w-7xl mx-auto px-6 md:px-12 mt-4"
+      style={{ position: 'fixed', top: '80px', left: '10px', right: '10px', zIndex: 99999, backgroundColor: '#111', padding: '10px', border: '1px solid red' }}
+    >
       <div className="bg-white/[0.02] backdrop-blur-3xl border border-white/5 rounded-[2.5rem] p-6 md:p-8 flex flex-col md:flex-row items-center justify-between gap-6 shadow-2xl relative overflow-hidden group">
         <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-indigo-500/20 to-transparent"></div>
 
