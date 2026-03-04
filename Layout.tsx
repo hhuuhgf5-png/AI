@@ -1,6 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { HistoryItem } from './types';
+import { User } from 'firebase/auth';
+import UserStatsCard from './UserStatsCard';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -9,9 +11,10 @@ interface LayoutProps {
   history: HistoryItem[];
   onHistoryClick: (item: HistoryItem) => void;
   onClearHistory: () => void;
+  user: User | null;
 }
 
-const Layout: React.FC<LayoutProps> = ({ children, activeFeature, setActiveFeature, history, onHistoryClick, onClearHistory }) => {
+const Layout: React.FC<LayoutProps> = ({ children, activeFeature, setActiveFeature, history, onHistoryClick, onClearHistory, user }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
 
@@ -76,6 +79,7 @@ const Layout: React.FC<LayoutProps> = ({ children, activeFeature, setActiveFeatu
   </div>
 </header>
 
+<UserStatsCard user={user} />
 
       {/* Sidebar / Drawer */}
       {isSidebarOpen && (

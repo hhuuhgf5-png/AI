@@ -5,7 +5,6 @@ import { Peer, DataConnection, MediaConnection } from 'peerjs';
 import { auth, provider } from './firebase';
 import { onAuthStateChanged, signInWithPopup, signOut, User } from 'firebase/auth';
 import Layout from './/Layout';
-import UserStatsCard from './UserStatsCard';
 import { gemini } from './geminiService';
 import { HistoryItem, DialogueType, VoiceGender, Flashcard, Dialect, ChatMessage, SessionState } from './types';
 import AudioPlayer from './/AudioPlayer';
@@ -708,8 +707,7 @@ const App: React.FC = () => {
 
   return (
     <>
-      {user && <UserStatsCard user={user} />}
-      <AnimatePresence>
+          <AnimatePresence>
         {showToast && (
           <motion.div
             initial={{ y: -80, opacity: 0 }}
@@ -725,6 +723,7 @@ const App: React.FC = () => {
       </AnimatePresence>
 
     <Layout 
+      user={user}
       activeFeature={activeFeature} 
       setActiveFeature={(feat) => {
         if (liveActive) stopLiveConversation();
