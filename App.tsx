@@ -2,10 +2,10 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import React, { useState, useEffect, useRef } from 'react';
 import { Peer, DataConnection, MediaConnection } from 'peerjs';
-import Layout from './components/Layout';
+import Layout from './/Layout';
 import { gemini } from './geminiService';
 import { HistoryItem, DialogueType, VoiceGender, Flashcard, Dialect, ChatMessage, SessionState, UserUsage } from './types';
-import AudioPlayer from './components/AudioPlayer';
+import AudioPlayer from './/AudioPlayer';
 import { createPcmBlob, decode, decodeAudioData, blobToBase64 } from './audioUtils';
 import { auth, googleProvider, signInWithPopup, signOut, onAuthStateChanged } from './firebase';
 
