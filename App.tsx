@@ -3,11 +3,13 @@ import { motion, AnimatePresence } from 'framer-motion';
 import React, { useState, useEffect, useRef } from 'react';
 import { Peer, DataConnection, MediaConnection } from 'peerjs';
 import Layout from './/Layout';
+import Layout from './Layout';
 import { gemini } from './geminiService';
 import { HistoryItem, DialogueType, VoiceGender, Flashcard, Dialect, ChatMessage, SessionState, UserUsage } from './types';
-import AudioPlayer from './/AudioPlayer';
+import AudioPlayer from './AudioPlayer';
 import { createPcmBlob, decode, decodeAudioData, blobToBase64 } from './audioUtils';
-import { auth, googleProvider, signInWithPopup, signOut, onAuthStateChanged } from './firebase';
+import { auth, googleProvider } from './firebase';
+import { signInWithPopup, signOut, onAuthStateChanged } from 'firebase/auth';
 
 const App: React.FC = () => {
   const [activeFeature, setActiveFeature] = useState('home');
