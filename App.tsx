@@ -2,24 +2,24 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import React, { useState, useEffect, useRef } from 'react';
 import { Peer, DataConnection, MediaConnection } from 'peerjs';
-import { auth, provider } from './firebase';
-import { onAuthStateChanged, signInWithPopup, signOut, User } from 'firebase/auth';
-import Layout from './/Layout';
+import Layout from './components/Layout';
 import { gemini } from './geminiService';
-import { HistoryItem, DialogueType, VoiceGender, Flashcard, Dialect, ChatMessage, SessionState } from './types';
-import AudioPlayer from './/AudioPlayer';
+import { HistoryItem, DialogueType, VoiceGender, Flashcard, Dialect, ChatMessage, SessionState, UserUsage } from './types';
+import AudioPlayer from './components/AudioPlayer';
 import { createPcmBlob, decode, decodeAudioData, blobToBase64 } from './audioUtils';
+import { auth, googleProvider, signInWithPopup, signOut, onAuthStateChanged } from './firebase';
 
 const App: React.FC = () => {
-  const [user, setUser] = useState<User | null>(null);
-  const [authLoading, setAuthLoading] = useState(true);
   const [activeFeature, setActiveFeature] = useState('home');
   const [loading, setLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState('جاري المعالجة...');
   const [error, setError] = useState<string | null>(null);
   const [history, setHistory] = useState<HistoryItem[]>([]);
-  const [showToast, setShowToast] = useState(() => !localStorage.getItem('firstVisitToast'));
   const [selectedDialect, setSelectedDialect] = useState<Dialect>('standard');
+  const [user, setUser] = useState<any>(null);
+  const [usage, setUsage] = useState<UserUsage | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [showWelcome, setShowWelcome] = useState(false);
   
   // States for tools
   const [assistantResponse, setAssistantResponse] = useState<{ text: string, audio?: string, showGenderMenu?: boolean, sources?: any[] } | null>(null);
@@ -53,36 +53,69 @@ const App: React.FC = () => {
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  const fetchUsage = async (uid: string) => {
+    try {
+      const response = await fetch('/api/usage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uid })
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setUsage(data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch usage:", err);
+    }
+  };
+
+  const updateUsage = async (type: 'message' | 'audio', amount?: number) => {
+    if (!user) return true;
+    try {
+      const response = await fetch('/api/usage/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uid: user.uid, type, amount })
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        setError(data.error || 'تجاوزت الحد المسموح به اليوم');
+        setTimeout(() => setError(null), 5000);
+        return false;
+      }
+      const data = await response.json();
+      setUsage(data);
+      return true;
+    } catch (err) {
+      console.error("Failed to update usage:", err);
+      return true; 
+    }
+  };
   
   // Live API States
   const [liveActive, setLiveActive] = useState(false);
-
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-      setAuthLoading(false);
-    });
-    return () => unsubscribe();
-  }, []);
+  const [liveStartTime, setLiveStartTime] = useState<number | null>(null);
   const liveSessionRef = useRef<any>(null);
   const nextStartTimeRef = useRef<number>(0);
   const outputAudioContextRef = useRef<AudioContext | null>(null);
   const sourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
   const mediaStreamRef = useRef<MediaStream | null>(null);
-
-    useEffect(() => {
-    if (!showToast) return;
-    
-    const timer = setTimeout(() => {
-      setShowToast(false);
-      localStorage.setItem('firstVisitToast', 'true');
-    }, 5000);
-
-    return () => clearTimeout(timer);
-  }, [showToast]);
-
+  
   // PeerJS Initialization
   useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      if (currentUser) {
+        setShowWelcome(true);
+        fetchUsage(currentUser.uid);
+        setTimeout(() => setShowWelcome(false), 5000);
+      } else {
+        setUsage(null);
+      }
+      setAuthLoading(false);
+    });
+
     const initPeer = () => {
       // Use a unique prefix to avoid collisions with other PeerJS users
       const prefix = "elearn-";
@@ -354,6 +387,12 @@ const App: React.FC = () => {
 
   // --- Live API Logic ---
   const startLiveConversation = async (customInstruction?: string) => {
+    if (!user) return;
+    if (usage && usage.audioSecondsUsed >= 300) {
+      setError('تجاوزت حد الصوت اليومي (٥ دقائق)');
+      return;
+    }
+    setLiveStartTime(Date.now());
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       mediaStreamRef.current = stream;
@@ -364,7 +403,7 @@ const App: React.FC = () => {
       const session = await gemini.connectLive({
         onopen: () => {
           const source = inputCtx.createMediaStreamSource(stream);
-          const processor = inputCtx.createScriptProcessor(4096, 1, 1);
+          const processor = inputCtx.createScriptProcessor(8192, 1, 1);
           processor.onaudioprocess = (e) => {
             const inputData = e.inputBuffer.getChannelData(0);
             const pcmBase64 = createPcmBlob(inputData);
@@ -424,6 +463,11 @@ const App: React.FC = () => {
   };
 
   const stopLiveConversation = () => {
+    if (liveStartTime) {
+      const durationSeconds = Math.ceil((Date.now() - liveStartTime) / 1000);
+      updateUsage('audio', durationSeconds);
+      setLiveStartTime(null);
+    }
     if (liveSessionRef.current) {
       liveSessionRef.current.close();
     }
@@ -431,25 +475,13 @@ const App: React.FC = () => {
     cleanupLive();
   };
 
-  const handleLogin = async () => {
-    try {
-      await signInWithPopup(auth, provider);
-    } catch (err) {
-      handleError(err);
-    }
-  };
-
-  const handleLogout = async () => {
-    try {
-      await signOut(auth);
-    } catch (err) {
-      handleError(err);
-    }
-  };
-
   // --- Feature Handlers ---
   const handleAssistant = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (!user) return;
+    const canProceed = await updateUsage('message');
+    if (!canProceed) return;
+
     const form = e.currentTarget;
     const promptElement = form.elements.namedItem('prompt') as HTMLInputElement;
     const prompt = promptElement.value;
@@ -457,8 +489,9 @@ const App: React.FC = () => {
     setLoadingMessage('جاري البحث والتحليل بالذكاء الاصطناعي...');
     setAssistantResponse(null);
     try {
-      const result = await gemini.askAssistant(prompt);
+      const result = await gemini.askAssistant(prompt, user.uid);
       setAssistantResponse({ text: result.text, sources: result.sources });
+      if (result.usage) setUsage(result.usage);
       addToHistory({ title: `مساعد: ${prompt}`, type: 'assistant', content: result });
       promptElement.value = '';
     } catch (err) { handleError(err); }
@@ -466,10 +499,16 @@ const App: React.FC = () => {
   };
 
   const handleTTS = async (text: string, gender: VoiceGender, target: 'assistant' | 'explainer' | 'analyzer' | 'standalone') => {
+    if (!user) return;
+    const wordCount = text.split(/\s+/).length;
+    const estimatedSeconds = Math.ceil(wordCount / 2.5);
+    const canProceed = await updateUsage('audio', estimatedSeconds);
+    if (!canProceed) return;
+
     setLoading(true);
     setLoadingMessage('جاري توليد الصوت الفاخر...');
     try {
-      const audio = await gemini.generateTTS(text, gender, selectedDialect);
+      const audio = await gemini.generateTTS(text, gender, selectedDialect, user.uid);
       if (audio) {
         if (target === 'assistant') setAssistantResponse(prev => prev ? { ...prev, audio, showGenderMenu: false } : null);
         else if (target === 'explainer') setExplainerResponse(prev => prev ? { ...prev, audio, showGenderMenu: false } : null);
@@ -486,6 +525,10 @@ const App: React.FC = () => {
 
   const handleAnalyzer = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (!user) return;
+    const canProceed = await updateUsage('message');
+    if (!canProceed) return;
+
     const form = e.currentTarget;
     const fileInput = form.elements.namedItem('file') as HTMLInputElement;
     const promptElement = form.elements.namedItem('prompt') as HTMLInputElement;
@@ -514,7 +557,7 @@ const App: React.FC = () => {
       setUploadingFile(false);
       
       setLoadingMessage('جاري تحليل المحتوى بالذكاء الاصطناعي...');
-      const result = await gemini.analyzeFileChat(base64, file.type, file.name, prompt, []);
+      const result = await gemini.analyzeFileChat(base64, file.type, file.name, prompt, [], user.uid);
       setAnalyzerResponse({ text: result });
       
       const newHistory: ChatMessage[] = [
@@ -539,8 +582,10 @@ const App: React.FC = () => {
 
   const handleAnalyzerChat = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!analyzerFile) return;
-    
+    if (!user || !analyzerFile) return;
+    const canProceed = await updateUsage('message');
+    if (!canProceed) return;
+
     const form = e.currentTarget;
     const promptElement = form.elements.namedItem('prompt') as HTMLInputElement;
     const prompt = promptElement.value;
@@ -553,7 +598,8 @@ const App: React.FC = () => {
         analyzerFile.type, 
         analyzerFile.name, 
         prompt, 
-        analyzerChatHistory
+        analyzerChatHistory,
+        user.uid
       );
       
       const newHistory: ChatMessage[] = [
@@ -580,17 +626,25 @@ const App: React.FC = () => {
 
   const handlePodcast = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (!user) return;
+    
     const form = e.currentTarget;
     const textElement = form.elements.namedItem('text') as HTMLTextAreaElement;
     const text = textElement.value;
+    
+    const wordCount = text.split(/\s+/).length;
+    const estimatedSeconds = Math.ceil(wordCount / 2);
+    const canProceed = await updateUsage('audio', estimatedSeconds);
+    if (!canProceed) return;
+
     const type = (form.elements.namedItem('type') as HTMLSelectElement).value as DialogueType;
     setLoading(true);
     setLoadingMessage('جاري كتابة سيناريو البودكاست...');
     setPodcastData(null);
     try {
-      const dialogue = await gemini.generatePodcastDialogue(text, type);
+      const dialogue = await gemini.generatePodcastDialogue(text, type, user.uid);
       setLoadingMessage('جاري تحويل السيناريو لصوت بشري...');
-      const audio = await gemini.generateMultiSpeakerTTS(dialogue, selectedDialect);
+      const audio = await gemini.generateMultiSpeakerTTS(dialogue, selectedDialect, user.uid);
       if (audio) {
         setPodcastData({ audio, dialogue });
         addToHistory({ title: `بودكاست: ${text.substring(0, 20)}...`, type: 'podcast', content: { audio, dialogue } });
@@ -602,6 +656,10 @@ const App: React.FC = () => {
 
   const handleFlashcards = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (!user) return;
+    const canProceed = await updateUsage('message');
+    if (!canProceed) return;
+
     const form = e.currentTarget;
     const textElement = form.elements.namedItem('text') as HTMLTextAreaElement;
     const text = textElement.value;
@@ -610,7 +668,7 @@ const App: React.FC = () => {
     setLoadingMessage('جاري استخراج البطاقات التعليمية...');
     setFlashcards([]);
     try {
-      const cards = await gemini.generateFlashcards(text, count);
+      const cards = await gemini.generateFlashcards(text, count, user.uid);
       setFlashcards(cards);
       addToHistory({ title: `بطاقات: ${text.substring(0, 20)}...`, type: 'flashcards', content: cards });
       textElement.value = '';
@@ -620,6 +678,10 @@ const App: React.FC = () => {
 
   const handleExplainer = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (!user) return;
+    const canProceed = await updateUsage('message');
+    if (!canProceed) return;
+
     const form = e.currentTarget;
     const topicElement = form.elements.namedItem('topic') as HTMLInputElement;
     const topic = topicElement.value;
@@ -627,12 +689,41 @@ const App: React.FC = () => {
     setLoadingMessage('جاري تحضير الشرح المفصل...');
     setExplainerResponse(null);
     try {
-      const result = await gemini.explainLesson(topic);
+      const result = await gemini.explainLesson(topic, user.uid);
       setExplainerResponse({ text: result.text, sources: result.sources });
+      if (result.usage) setUsage(result.usage);
       addToHistory({ title: `شرح: ${topic}`, type: 'explainer', content: result });
       topicElement.value = '';
     } catch (err) { handleError(err); }
     setLoading(false);
+  };
+
+  const handleLogin = async () => {
+    try {
+      setLoading(true);
+      setLoadingMessage('جاري تسجيل الدخول...');
+      await signInWithPopup(auth, googleProvider);
+    } catch (err: any) {
+      console.error("Login Error:", err);
+      if (err.code === 'auth/unauthorized-domain') {
+        setError("خطأ: الدومين غير مسموح به. يرجى إضافة رابط المعاينة في إعدادات Firebase (Authorized Domains).");
+      } else if (err.code === 'auth/popup-closed-by-user') {
+        setError("تم إغلاق نافذة تسجيل الدخول قبل إتمام العملية.");
+      } else {
+        handleError(err);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      setUser(null);
+    } catch (err: any) {
+      handleError(err);
+    }
   };
 
   const renderSources = (sources?: any[]) => {
@@ -660,70 +751,141 @@ const App: React.FC = () => {
 
   if (authLoading) {
     return (
-      <div style={{ minHeight: '100vh', backgroundColor: '#050505', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ color: 'white', fontWeight: 'bold' }}>جاري التحميل...</div>
-      </div>
-    );
-  }
-
-  if (!user) {
-    return (
-      <div style={{ minHeight: '100vh', backgroundColor: '#050505', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px', textAlign: 'center' }}>
-        <div style={{ marginBottom: '40px' }}>
-          <div style={{ width: '80px', height: '80px', backgroundColor: 'white', borderRadius: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', boxShadow: "0 8px 16px rgba(255,255,255,0.08)" }}>
-            <i className="fa-solid fa-graduation-cap" style={{ fontSize: '40px', color: 'black' }}></i>
-          </div>
-          <h1 style={{ fontSize: '2.5rem', fontWeight: '900', color: 'white', margin: '0', fontStyle: 'italic' }}>
-            الـ<span style={{ color: '#6366f1' }}>منصة</span>
-          </h1>
-          <p style={{ color: 'rgba(255,255,255,0.4)', marginTop: '10px' }}>أهلاً بك في منصة التعلم الذكية</p>
+      <div className="fixed inset-0 bg-black flex items-center justify-center z-[2000]">
+        <div className="flex flex-col items-center gap-8">
+          <div className="w-16 h-16 border-2 border-white/10 border-t-white rounded-full animate-spin"></div>
+          <p className="text-white/20 font-black uppercase tracking-[0.4em] text-[10px]">جاري التحقق من الهوية...</p>
         </div>
-        <button
-          onClick={handleLogin}
-          style={{
-            backgroundColor: 'white',
-            color: 'black',
-            padding: '16px 32px',
-            borderRadius: '16px',
-            fontWeight: '900',
-            border: 'none',
-            cursor: 'pointer',
-            fontSize: '1rem',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '12px',
-            transition: 'transform 0.2s',
-            boxShadow: '0 10px 20px rgba(255,255,255,0.1)'
-          }}
-          onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
-          onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
-        >
-          <i className="fa-brands fa-google"></i>
-          تسجيل الدخول بواسطة جوجل
-        </button>
       </div>
     );
   }
 
   return (
-    <>
-          <AnimatePresence>
-        {showToast && (
-          <motion.div
-            initial={{ y: -80, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: -80, opacity: 0 }}
-            transition={{ duration: 0.6, ease: "easeOut" }}
-            className="fixed top-2 left-1/2 -translate-x-1/2 bg-[#111]/90 backdrop-blur-md text-white p-3 rounded-xl z-[100] w-[95%] sm:max-w-md text-center shadow-2xl text-xs sm:text-sm leading-relaxed border border-white/10"
+    <div dir="rtl" className="min-h-screen bg-[#050505]">
+      {/* Global Overlays */}
+      <AnimatePresence>
+        {loading && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black flex items-center justify-center z-[2000]"
           >
-            مرحبًا، هذي هي النسخه الاولى من الموقع، قريبًا سوف يتم تحديث الموقع بالكامل،
-            إذا وجدت مشكله في الموقع، برجاء التواصل معنا، شكرًا لكم
+            <div className="flex flex-col items-center gap-12">
+              <div className="relative">
+                <div className="w-20 h-20 border-2 border-white/10 border-t-white rounded-full animate-spin"></div>
+                <div className="absolute inset-0 flex items-center justify-center">
+                   <i className="fa-solid fa-brain text-white text-xl animate-pulse"></i>
+                </div>
+              </div>
+              <div className="text-center space-y-4">
+                <p className="font-black text-xl text-white font-serif italic tracking-[0.2em] uppercase">{loadingMessage}</p>
+                <div className="flex justify-center gap-1">
+                  <div className="w-1 h-1 bg-white/20 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                  <div className="w-1 h-1 bg-white/20 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                  <div className="w-1 h-1 bg-white/20 rounded-full animate-bounce"></div>
+                </div>
+              </div>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-    <Layout 
-      activeFeature={activeFeature} 
+      <AnimatePresence>
+        {error && (
+          <motion.div 
+            initial={{ opacity: 0, y: -50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -50 }}
+            className="fixed top-24 left-4 right-4 md:left-auto md:right-8 md:w-96 bg-red-600 text-white p-6 rounded-3xl shadow-[0_20px_50px_rgba(220,38,38,0.3)] z-[2100] flex items-center justify-between border-2 border-white/20"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center shrink-0">
+                <i className="fa-solid fa-circle-exclamation text-xl"></i>
+              </div>
+              <span className="text-sm font-black leading-tight">{error}</span>
+            </div>
+            <button onClick={() => setError(null)} className="w-8 h-8 flex items-center justify-center hover:bg-white/20 active:scale-90 rounded-lg transition-all shrink-0">
+              <i className="fa-solid fa-xmark"></i>
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showWelcome && user && (
+          <motion.div 
+            initial={{ opacity: 0, y: -100, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -100, scale: 0.9 }}
+            className="fixed top-28 left-1/2 -translate-x-1/2 z-[2050] bg-white text-black px-8 py-5 rounded-[2rem] shadow-[0_30px_60px_rgba(0,0,0,0.5)] font-black flex items-center gap-5 border border-white/20"
+          >
+            <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-black/5 shadow-inner">
+              <img 
+                src={user.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName || 'User')}&background=random`} 
+                alt="" 
+                className="w-full h-full object-cover" 
+              />
+            </div>
+            <div className="flex flex-col">
+              <span className="text-[10px] text-black/20 uppercase tracking-widest leading-none mb-1">تم تسجيل الدخول بنجاح</span>
+              <span className="text-lg tracking-tight">مرحبًا {user.displayName}</span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {!user ? (
+        <div className="min-h-screen bg-[#050505] flex items-center justify-center p-6 relative overflow-hidden" dir="rtl">
+          {/* Background Accents */}
+          <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-indigo-500/10 blur-[120px] rounded-full"></div>
+          <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-emerald-500/5 blur-[120px] rounded-full"></div>
+          
+          <div className="max-w-md w-full space-y-12 text-center relative z-10">
+            <motion.div 
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ type: "spring", damping: 20 }}
+              className="w-28 h-28 bg-white rounded-[2.5rem] flex items-center justify-center mx-auto shadow-[0_30px_60px_rgba(255,255,255,0.1)] border border-white/20"
+            >
+              <i className="fa-solid fa-graduation-cap text-black text-5xl"></i>
+            </motion.div>
+            
+            <div className="space-y-6">
+              <h1 className="text-6xl font-black text-white font-serif italic tracking-tighter leading-none">
+                الـ<span className="text-indigo-500">منصة</span>
+              </h1>
+              <div className="h-1 w-20 bg-indigo-500 mx-auto rounded-full opacity-50"></div>
+              <p className="text-white/40 font-medium text-xl leading-relaxed max-w-[280px] mx-auto">
+                مرحباً بك في مستقبل التعليم. يرجى تسجيل الدخول للبدء.
+              </p>
+            </div>
+
+            <motion.button 
+              whileHover={{ scale: 1.02, y: -2 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={handleLogin}
+              disabled={loading}
+              className="w-full group relative bg-white text-black py-7 rounded-[2.5rem] font-black text-sm uppercase tracking-[0.2em] shadow-[0_20px_40px_rgba(255,255,255,0.1)] flex items-center justify-center gap-5 overflow-hidden transition-all"
+            >
+              <div className="absolute inset-0 bg-indigo-500/5 translate-y-full group-hover:translate-y-0 transition-transform duration-500"></div>
+              <i className="fa-brands fa-google text-2xl relative z-10"></i>
+              <span className="relative z-10">الدخول بواسطة جوجل</span>
+            </motion.button>
+
+            <div className="pt-10 flex flex-col items-center gap-4">
+              <p className="text-[9px] text-white/10 font-black uppercase tracking-[0.4em]">الذكاء الاصطناعي التعليمي المتطور</p>
+              <div className="flex gap-6">
+                <i className="fa-brands fa-apple text-white/5 text-lg"></i>
+                <i className="fa-brands fa-microsoft text-white/5 text-lg"></i>
+                <i className="fa-brands fa-google text-white/5 text-lg"></i>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <Layout 
+          activeFeature={activeFeature} 
       setActiveFeature={(feat) => {
         if (liveActive) stopLiveConversation();
         setActiveFeature(feat);
@@ -757,28 +919,13 @@ const App: React.FC = () => {
           localStorage.removeItem('elearning_history');
         }
       }}
+      user={user}
+      onLogin={handleLogin}
+      onLogout={handleLogout}
+      usage={usage}
+      selectedDialect={selectedDialect}
+      onDialectChange={setSelectedDialect}
     >
-      <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: '20px' }}>
-        <button
-          onClick={handleLogout}
-          style={{
-            backgroundColor: 'rgba(255, 255, 255, 0.05)',
-            color: 'rgba(255, 255, 255, 0.6)',
-            padding: '8px 16px',
-            borderRadius: '12px',
-            fontSize: '12px',
-            fontWeight: 'bold',
-            border: '1px solid rgba(255, 255, 255, 0.1)',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px'
-          }}
-        >
-          <i className="fa-solid fa-right-from-bracket"></i>
-          تسجيل الخروج
-        </button>
-      </div>
       <AnimatePresence mode="wait">
         <motion.div
           key={activeFeature}
@@ -788,52 +935,6 @@ const App: React.FC = () => {
           transition={{ duration: 0.3, ease: "easeOut" }}
           className="w-full"
         >
-          {/* Error Notification */}
-          {error && (
-            <div className="fixed top-24 left-4 right-4 md:left-auto md:right-8 md:w-full md:max-w-sm bg-red-600 text-white p-4 rounded-2xl shadow-2xl z-[100] animate-slideUp flex items-center justify-between border-2 border-white/20">
-              <div className="flex items-center gap-3">
-                <i className="fa-solid fa-circle-exclamation text-xl"></i>
-                <span className="text-sm font-bold leading-tight">{error}</span>
-              </div>
-              <button onClick={() => setError(null)} className="p-1 hover:bg-white/20 active:scale-90 rounded-lg transition-transform"><i className="fa-solid fa-xmark"></i></button>
-            </div>
-          )}
-
-          {/* Global Dialect Selector */}
-          {activeFeature !== 'home' && activeFeature !== 'flashcards' && activeFeature !== 'group' && (
-            <div className="max-w-2xl mx-auto mb-12 bg-white/[0.03] backdrop-blur-3xl p-5 md:p-8 rounded-3xl border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.3)] flex flex-col md:flex-row items-center justify-between gap-6 sticky top-24 z-10 animate-slideUp">
-              <div className="flex items-center gap-4">
-                <div className="w-10 h-10 bg-indigo-500/10 text-indigo-400 rounded-2xl flex items-center justify-center border border-indigo-500/20 shadow-xl">
-                  <i className="fa-solid fa-language text-lg"></i>
-                </div>
-                <div className="flex flex-col">
-                  <span className="font-black text-[10px] text-white/30 uppercase tracking-[0.2em]">تخصيص التجربة</span>
-                  <span className="font-black text-sm text-white">اختر اللهجة المفضلة</span>
-                </div>
-              </div>
-              <div className="flex flex-wrap gap-2 justify-center">
-                {(['standard', 'egyptian', 'saudi', 'lebanese', 'maghrebi'] as Dialect[]).map((d) => (
-                  <button
-                    key={d}
-                    onClick={() => setSelectedDialect(d)}
-                    disabled={liveActive}
-                    className={`px-4 md:px-5 py-2.5 rounded-2xl text-[10px] md:text-[11px] font-black transition-all border tracking-widest uppercase ${
-                      selectedDialect === d 
-                        ? 'bg-white text-black border-white shadow-[0_10px_20px_rgba(255,255,255,0.1)] active:scale-95' 
-                        : 'bg-white/5 text-white/30 border-white/5 hover:border-white/20 hover:bg-white/10 active:scale-95'
-                    } ${liveActive ? 'opacity-40' : ''}`}
-                  >
-                    {d === 'standard' && 'الفصحى'}
-                    {d === 'egyptian' && 'المصرية'}
-                    {d === 'saudi' && 'السعودية'}
-                    {d === 'lebanese' && 'اللبنانية'}
-                    {d === 'maghrebi' && 'المغربية'}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
           {/* HOME PAGE - Bento Grid */}
           {activeFeature === 'home' && (
             <div className="space-y-20">
@@ -843,7 +944,7 @@ const App: React.FC = () => {
                   initial={{ scale: 0.9, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
                   transition={{ delay: 0.2 }}
-                  className="inline-flex items-center gap-3 bg-white/5 text-white/50 px-8 py-3 rounded-full text-[11px] font-black tracking-[0.3em] uppercase mb-10 border border-white/10 backdrop-blur-xl"
+                  className="inline-flex items-center gap-3 bg-white/5 text-white/50 px-8 py-3 rounded-full text-[11px] font-black tracking-[0.3em] uppercase mb-10 border border-white/10"
                 >
                   <span className="relative flex h-2.5 w-2.5">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
@@ -851,7 +952,7 @@ const App: React.FC = () => {
                   </span>
                   مستقبلك يبدأ هنا
                 </motion.div>
-                <h2 className="text-3xl sm:text-6xl md:text-[10vw] font-black text-white leading-[0.85] tracking-tighter font-serif italic mb-10">
+                <h2 className="text-6xl md:text-[10vw] font-black text-white leading-[0.85] tracking-tighter font-serif italic mb-10">
                   تعلم بـ<span className="text-indigo-500">ذكاء</span> <br />
                   <span className="text-white/10">تطور بسرعة</span>
                 </h2>
@@ -986,9 +1087,11 @@ const App: React.FC = () => {
                   </motion.div>
                 </div>
               ) : (
-                <div className="bg-white p-10 rounded-[2.5rem] border-2 border-indigo-100 shadow-2xl text-center space-y-8">
-                  <div className="space-y-2">
-                    <p className="text-sm font-black text-gray-400 uppercase tracking-widest">كود الجلسة الخاص بك</p>
+                <div className="bg-white/[0.03] p-10 md:p-16 rounded-[3rem] md:rounded-[4rem] border border-white/10 shadow-[0_30px_60px_rgba(0,0,0,0.5)] text-center space-y-12 relative overflow-hidden">
+                  <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-indigo-500/50 to-transparent"></div>
+                  
+                  <div className="space-y-6">
+                    <p className="text-[10px] font-black text-white/20 uppercase tracking-[0.4em]">كود الجلسة الخاص بك</p>
                     <div 
                       onClick={() => {
                         if (session.roomId) {
@@ -997,25 +1100,25 @@ const App: React.FC = () => {
                           setError("تم نسخ الكود بنجاح!");
                         }
                       }}
-                      className="text-6xl font-black text-indigo-600 tracking-[0.2em] bg-indigo-50 py-6 rounded-3xl border-2 border-indigo-100 cursor-pointer hover:bg-indigo-100 transition-colors relative group"
+                      className="text-5xl md:text-7xl font-black text-white tracking-[0.2em] bg-white/5 py-8 md:py-12 rounded-[2.5rem] md:rounded-[3.5rem] border border-white/10 cursor-pointer hover:bg-white/10 transition-all relative group shadow-inner"
                     >
                       {session.roomId ? session.roomId.replace("elearn-", "") : "..."}
-                      <div className="absolute -top-3 right-1/2 translate-x-1/2 bg-indigo-600 text-white text-[10px] px-2 py-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">إضغط للنسخ</div>
+                      <div className="absolute -top-3 right-1/2 translate-x-1/2 bg-indigo-600 text-white text-[9px] px-4 py-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-all shadow-xl">إضغط للنسخ</div>
                     </div>
                     <button 
                       onClick={() => {
                         navigator.clipboard.writeText(window.location.href);
                         setError("تم نسخ رابط التطبيق! أرسله لصديقك ليدخل الكود.");
                       }}
-                      className="text-xs font-bold text-indigo-400 hover:text-indigo-600 transition-colors flex items-center gap-2 mx-auto"
+                      className="text-[10px] font-black text-white/20 hover:text-indigo-400 transition-all flex items-center gap-3 mx-auto uppercase tracking-widest"
                     >
-                      <i className="fa-solid fa-link"></i>
+                      <i className="fa-solid fa-link text-indigo-500"></i>
                       نسخ رابط التطبيق لإرساله لصديقك
                     </button>
                   </div>
 
-                  <div className="flex flex-col items-center gap-4">
-                    <div className={`flex items-center gap-3 px-6 py-3 rounded-full font-black text-sm ${session.connected ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600 animate-pulse'}`}>
+                  <div className="flex flex-col items-center gap-8">
+                    <div className={`flex items-center gap-4 px-8 py-4 rounded-full font-black text-[10px] uppercase tracking-widest border transition-all ${session.connected ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 'bg-amber-500/10 text-amber-500 border-amber-500/20 animate-pulse'}`}>
                       <span className="relative flex h-3 w-3">
                         <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${session.connected ? 'bg-emerald-400' : 'bg-amber-400'}`}></span>
                         <span className={`relative inline-flex rounded-full h-3 w-3 ${session.connected ? 'bg-emerald-600' : 'bg-amber-600'}`}></span>
@@ -1024,9 +1127,9 @@ const App: React.FC = () => {
                     </div>
                     
                     {session.connected && (
-                      <div className="text-gray-500 font-medium max-w-sm">
+                      <p className="text-white/40 font-medium max-w-sm leading-relaxed text-sm">
                         رائع! أنتما الآن في نفس الجلسة. أي ملف ترفعه أو سؤال تسأله سيظهر عند صديقك فوراً.
-                      </div>
+                      </p>
                     )}
 
                     <button 
@@ -1037,7 +1140,7 @@ const App: React.FC = () => {
                         setSession({ roomId: null, isHost: false, connected: false, messages: [], callState: 'idle' });
                         window.location.reload();
                       }}
-                      className="text-red-500 font-black text-sm hover:underline mt-4"
+                      className="text-red-500/40 hover:text-red-500 font-black text-[10px] uppercase tracking-widest transition-all mt-6"
                     >
                       إنهاء الجلسة
                     </button>
@@ -1047,11 +1150,12 @@ const App: React.FC = () => {
             </div>
           )}
 
+
       {/* LIVE VIEW */}
       {activeFeature === 'live' && (
         <div className="max-w-4xl mx-auto space-y-10">
           <SectionHeader title="المحادثة الفورية الفاخرة" icon="fa-microphone-lines" onBack={() => setActiveFeature('home')} />
-              <div className="bg-white/[0.02] p-8 sm:p-16 rounded-3xl sm:rounded-[4rem] border border-white/5 shadow-2xl text-center space-y-12 flex flex-col items-center relative overflow-hidden">
+          <div className="bg-white/[0.02] p-16 rounded-[4rem] border border-white/5 shadow-2xl text-center space-y-12 flex flex-col items-center relative overflow-hidden">
             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-indigo-500/50 to-transparent"></div>
             
             <div className={`w-40 h-40 flex items-center justify-center rounded-full transition-all duration-700 border border-white/10 ${liveActive ? 'bg-red-500/10 animate-pulse shadow-[0_0_50px_rgba(239,68,68,0.2)] border-red-500/30' : 'bg-white/5 shadow-inner'}`}>
@@ -1096,7 +1200,7 @@ const App: React.FC = () => {
           <SectionHeader title="المساعد الشخصي الذكي" icon="fa-robot" onBack={() => setActiveFeature('home')} />
           
           <div className="bg-white/[0.02] p-6 md:p-10 rounded-3xl md:rounded-[3rem] border border-white/5 shadow-2xl space-y-10">
-            <form onSubmit={handleAssistant} className="flex flex-col md:flex-row gap-4 bg-white/[0.03] p-3 rounded-2xl md:rounded-[2rem] border border-white/10 shadow-2xl">
+            <form onSubmit={handleAssistant} className="flex flex-col sm:flex-row gap-4 bg-white/[0.03] p-3 rounded-2xl md:rounded-[2rem] border border-white/10 shadow-2xl">
               <input name="prompt" required placeholder="اسأل سؤالك العلمي هنا..." className="flex-1 p-4 outline-none bg-transparent font-medium text-base md:text-lg text-white placeholder:text-white/20" />
               <motion.button 
                 whileHover={{ scale: 1.02 }}
@@ -1148,8 +1252,8 @@ const App: React.FC = () => {
               animate={{ opacity: 1, scale: 1 }}
               className="bg-white/[0.02] p-6 md:p-12 rounded-3xl md:rounded-[3rem] border border-white/5 shadow-2xl space-y-10"
             >
-              <form onSubmit={handleAnalyzer} className="space-y-6 md:space-y-10">
-                <div className="border border-dashed border-white/10 rounded-2xl md:rounded-[2.5rem] p-6 md:p-16 text-center bg-white/[0.03] hover:bg-white/[0.05] transition-all group cursor-pointer relative shadow-inner">
+              <form onSubmit={handleAnalyzer} className="space-y-10">
+                <div className="border border-dashed border-white/10 rounded-2xl md:rounded-[2.5rem] p-8 md:p-16 text-center bg-white/[0.03] hover:bg-white/[0.05] transition-all group cursor-pointer relative shadow-inner">
                   <input 
                     name="file" 
                     type="file" 
@@ -1283,7 +1387,7 @@ const App: React.FC = () => {
               className="w-full bg-white/[0.03] border border-white/10 rounded-2xl md:rounded-[2.5rem] p-6 md:p-10 text-white outline-none focus:border-indigo-500/50 transition-all duration-500 resize-none text-lg md:text-xl font-medium placeholder:text-white/10 shadow-inner" 
               placeholder="اكتب النص الذي ترغب في سماعه هنا..."
             ></textarea>
-            <div className="flex flex-col sm:flex-row gap-4 md:gap-6">
+            <div className="flex flex-col md:flex-row gap-6">
               <button disabled={loading} onClick={() => {
                 const txt = (document.getElementById('tts-input-area') as HTMLTextAreaElement).value;
                 if(txt) handleTTS(txt, 'male', 'standalone');
@@ -1343,7 +1447,7 @@ const App: React.FC = () => {
               placeholder="أدخل النص لاستخراج البطاقات منه..." 
               className="w-full bg-white/[0.03] border border-white/10 rounded-2xl md:rounded-[2.5rem] p-6 md:p-10 text-white outline-none focus:border-indigo-500/50 transition-all duration-500 resize-none text-lg md:text-xl font-medium placeholder:text-white/10 shadow-inner"
             ></textarea>
-            <div className="flex flex-col md:flex-row gap-6 md:gap-8">
+            <div className="flex flex-col md:flex-row items-center gap-8">
               <div className="flex items-center gap-6 bg-white/[0.03] px-8 py-4 rounded-2xl border border-white/10 shadow-inner w-full md:w-auto justify-between md:justify-start">
                 <label className="text-[10px] font-black text-white/20 uppercase tracking-widest">العدد</label>
                 <input name="count" type="number" defaultValue={5} min={1} max={20} className="w-16 bg-transparent outline-none font-black text-white text-xl text-center" />
@@ -1388,37 +1492,19 @@ const App: React.FC = () => {
       )}
         </motion.div>
       </AnimatePresence>
-
-      {/* Global Loading Overlay */}
-      {loading && (
-        <div className="fixed inset-0 bg-black/90 backdrop-blur-2xl flex items-center justify-center z-[110] animate-fadeIn">
-          <div className="flex flex-col items-center gap-10">
-            <div className="relative">
-              <div className="w-32 h-32 border-[12px] border-white/5 border-t-indigo-500 rounded-full animate-spin shadow-2xl"></div>
-              <div className="absolute inset-0 flex items-center justify-center">
-                 <i className="fa-solid fa-brain text-white text-4xl animate-pulse"></i>
-              </div>
-            </div>
-            <div className="text-center space-y-4">
-              <p className="font-black text-4xl text-white font-serif italic tracking-widest uppercase">{loadingMessage}</p>
-              <p className="text-[10px] text-white/20 font-black uppercase tracking-[0.4em] animate-pulse">الذكاء الاصطناعي يقوم بالتحليل الآن</p>
-            </div>
-          </div>
-        </div>
-      )}
       {/* Floating Chat & Call UI */}
       {session.connected && (
-        <div className="fixed bottom-10 left-10 z-40 flex flex-col items-end gap-6">
+        <div className="fixed bottom-10 left-10 z-[100] flex flex-col items-end gap-6">
           <audio ref={remoteAudioRef} autoPlay className="hidden" />
           
           <AnimatePresence>
             {/* Call Menu (Choice between Chat or Call) */}
             {showCallMenu && !showChat && session.callState === 'idle' && (
               <motion.div 
-                initial={{ opacity: 0, scale: 0.9, y: 20 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.9, y: 20 }}
-                className="bg-black/90 backdrop-blur-3xl p-6 rounded-[2.5rem] shadow-2xl border border-white/10 flex flex-col gap-4 w-64"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 10 }}
+                className="bg-black/95 p-6 rounded-[2.5rem] shadow-2xl border border-white/10 flex flex-col gap-4 w-64"
               >
                 <button 
                   onClick={() => { setShowChat(true); setShowCallMenu(false); }}
@@ -1444,9 +1530,9 @@ const App: React.FC = () => {
             {/* Incoming Call UI */}
             {session.callState === 'incoming' && (
               <motion.div 
-                initial={{ opacity: 0, scale: 0.9, y: 20 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                className="bg-black/90 backdrop-blur-3xl p-10 rounded-[3rem] shadow-2xl border border-emerald-500/30 flex flex-col items-center gap-8 w-72 text-center"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-black/95 p-10 rounded-[3rem] shadow-2xl border border-emerald-500/30 flex flex-col items-center gap-8 w-72 text-center"
               >
                 <div className="w-24 h-24 bg-emerald-500/10 text-emerald-500 rounded-full flex items-center justify-center text-4xl animate-bounce border border-emerald-500/20 shadow-[0_0_30px_rgba(16,185,129,0.2)]">
                   <i className="fa-solid fa-phone-volume"></i>
@@ -1465,9 +1551,9 @@ const App: React.FC = () => {
             {/* Active Call UI */}
             {(session.callState === 'connected' || session.callState === 'calling') && (
               <motion.div 
-                initial={{ opacity: 0, scale: 0.9, y: 20 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                className="bg-black/95 backdrop-blur-3xl p-10 rounded-[3rem] shadow-2xl border border-white/10 flex flex-col items-center gap-10 w-72 text-white"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-black/95 p-10 rounded-[3rem] shadow-2xl border border-white/10 flex flex-col items-center gap-10 w-72 text-white"
               >
                 <div className="relative">
                   <div className={`w-28 h-28 bg-white/5 rounded-full flex items-center justify-center text-5xl border border-white/10 ${session.callState === 'connected' ? 'animate-pulse shadow-[0_0_40px_rgba(255,255,255,0.05)]' : ''}`}>
@@ -1513,10 +1599,10 @@ const App: React.FC = () => {
             {/* Chat Window */}
             {showChat && (
               <motion.div 
-                initial={{ opacity: 0, scale: 0.9, y: 20 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.9, y: 20 }}
-                className="fixed inset-4 sm:inset-auto sm:bottom-28 sm:left-10 sm:w-96 sm:h-[550px] bg-black/95 backdrop-blur-3xl rounded-3xl sm:rounded-[3rem] shadow-2xl border border-white/10 flex flex-col overflow-hidden z-[100]"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 10 }}
+                className="w-96 h-[550px] bg-black/95 rounded-[3rem] shadow-2xl border border-white/10 flex flex-col overflow-hidden"
               >
                 <div className="bg-white/5 p-8 text-white flex items-center justify-between border-b border-white/5">
                   <div className="flex items-center gap-4">
@@ -1590,8 +1676,9 @@ const App: React.FC = () => {
         </div>
       )}
     </Layout>
-      </>
-  );
+  )}
+</div>
+);
 };
 
 // Helper Components
@@ -1626,15 +1713,15 @@ const FeatureCard: React.FC<{ title: string, desc: string, icon: string, color: 
 );
 
 const SectionHeader: React.FC<{ title: string, icon: string, onBack: () => void }> = ({ title, icon, onBack }) => (
-  <div className="flex items-center gap-4 sm:gap-6 md:gap-8 bg-white/[0.03] backdrop-blur-3xl p-4 sm:p-6 md:p-10 rounded-2xl sm:rounded-3xl md:rounded-[3.5rem] border border-white/10 shadow-[0_30px_60px_rgba(0,0,0,0.5)] mb-8 sm:mb-12 md:mb-20 animate-slideUp">
-    <button onClick={onBack} className="w-10 h-10 sm:w-12 sm:h-12 md:w-16 md:h-16 flex items-center justify-center bg-white/5 hover:bg-white hover:text-black active:scale-90 rounded-xl sm:rounded-2xl md:rounded-3xl transition-all text-white/40 border border-white/10 shadow-xl">
-      <i className="fa-solid fa-arrow-right text-lg sm:text-xl md:text-2xl"></i>
+  <div className="flex items-center gap-6 md:gap-8 bg-white/[0.03] p-6 md:p-10 rounded-3xl md:rounded-[3.5rem] border border-white/10 shadow-[0_30px_60px_rgba(0,0,0,0.5)] mb-12 md:mb-20 animate-slideUp">
+    <button onClick={onBack} className="w-12 h-12 md:w-16 md:h-16 flex items-center justify-center bg-white/5 hover:bg-white hover:text-black active:scale-90 rounded-2xl md:rounded-3xl transition-all text-white/40 border border-white/10 shadow-xl">
+      <i className="fa-solid fa-arrow-right text-xl md:text-2xl"></i>
     </button>
-    <div className="flex items-center gap-3 sm:gap-4 md:gap-6">
-      <div className="w-10 h-10 sm:w-12 sm:h-12 md:w-20 md:h-20 bg-white text-black rounded-xl sm:rounded-2xl md:rounded-[2rem] flex items-center justify-center shadow-2xl">
-        <i className={`fa-solid ${icon} text-lg sm:text-xl md:text-3xl`}></i>
+    <div className="flex items-center gap-4 md:gap-6">
+      <div className="w-12 h-12 md:w-20 md:h-20 bg-white text-black rounded-2xl md:rounded-[2rem] flex items-center justify-center shadow-2xl">
+        <i className={`fa-solid ${icon} text-xl md:text-3xl`}></i>
       </div>
-      <h2 className="text-xl sm:text-2xl md:text-5xl font-black text-white font-serif italic tracking-tighter">{title}</h2>
+      <h2 className="text-2xl md:text-5xl font-black text-white font-serif italic tracking-tighter">{title}</h2>
     </div>
   </div>
 );
@@ -1646,14 +1733,9 @@ const FlashcardViewer: React.FC<{ cards: Flashcard[] }> = ({ cards }) => {
 
   return (
     <div className="space-y-10">
-      <div className="relative h-80 md:h-96 w-full cursor-pointer [perspective:1000px]" onClick={() => setFlipped(!flipped)}>
-        <motion.div
-          className="relative w-full h-full [transform-style:preserve-3d]"
-          animate={{ rotateY: flipped ? 180 : 0 }}
-          transition={{ duration: 0.6, ease: "easeInOut" }}
-        >
-          {/* Front Face */}
-          <div className="absolute inset-0 w-full h-full [backface-visibility:hidden] bg-white/[0.03] border border-white/10 rounded-3xl md:rounded-[4rem] flex flex-col items-center justify-center p-8 md:p-12 text-center shadow-2xl backdrop-blur-xl overflow-hidden">
+      <div className="relative h-80 md:h-96 w-full cursor-pointer perspective-2000" onClick={() => setFlipped(!flipped)}>
+        <div className={`absolute inset-0 w-full h-full transition-all duration-1000 transform-style-3d ${flipped ? 'rotate-y-180' : ''}`}>
+          <div className="absolute inset-0 backface-hidden bg-white/[0.03] border border-white/10 rounded-3xl md:rounded-[4rem] flex flex-col items-center justify-center p-8 md:p-12 text-center shadow-2xl overflow-hidden">
             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-indigo-500/50 to-transparent"></div>
             <span className="text-[10px] font-black text-white/20 mb-6 md:mb-10 uppercase tracking-[0.4em]">المصطلح / السؤال</span>
             <h4 className="text-2xl md:text-4xl font-black text-white leading-tight font-serif italic">{card.term}</h4>
@@ -1661,8 +1743,7 @@ const FlashcardViewer: React.FC<{ cards: Flashcard[] }> = ({ cards }) => {
               <i className="fa-solid fa-sync"></i> انقر لرؤية الإجابة
             </div>
           </div>
-          {/* Back Face */}
-          <div className="absolute inset-0 w-full h-full [backface-visibility:hidden] [transform:rotateY(180deg)] bg-white text-black rounded-3xl md:rounded-[4rem] flex flex-col items-center justify-center p-8 md:p-12 text-center shadow-2xl overflow-hidden">
+          <div className="absolute inset-0 backface-hidden bg-white text-black rounded-3xl md:rounded-[4rem] flex flex-col items-center justify-center p-8 md:p-12 text-center shadow-2xl rotate-y-180 overflow-hidden">
             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-indigo-500 to-transparent opacity-20"></div>
             <span className="text-[10px] font-black text-black/20 mb-6 md:mb-10 uppercase tracking-[0.4em]">التفسير / الإجابة</span>
             <p className="text-xl md:text-2xl leading-relaxed font-bold">{card.definition}</p>
@@ -1670,7 +1751,7 @@ const FlashcardViewer: React.FC<{ cards: Flashcard[] }> = ({ cards }) => {
               <i className="fa-solid fa-sync"></i> انقر للعودة للسؤال
             </div>
           </div>
-        </motion.div>
+        </div>
       </div>
       <div className="flex items-center justify-between px-6 md:px-12 bg-white/[0.02] p-6 md:p-8 rounded-3xl md:rounded-[3rem] border border-white/5 shadow-2xl">
         <button disabled={currentIndex === 0} onClick={() => { setCurrentIndex(v => v - 1); setFlipped(false); }} className="px-6 md:px-10 py-3 md:py-4 rounded-xl md:rounded-2xl font-black text-white/40 hover:text-white hover:bg-white/5 active:scale-95 disabled:opacity-5 transition-all uppercase tracking-widest text-[10px]">السابق</button>

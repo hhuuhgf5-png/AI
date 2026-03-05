@@ -22,6 +22,12 @@ export interface HistoryItem {
   timestamp: number;
 }
 
+export interface UserUsage {
+  messagesUsed: number;
+  audioSecondsUsed: number;
+  lastResetDate: string; // YYYY-MM-DD
+}
+
 export interface SessionState {
   roomId: string | null;
   isHost: boolean;

@@ -12,8 +12,9 @@ export default defineConfig(({ mode }) => {
       },
       plugins: [react(), tailwindcss()],
       define: {
-        'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-        'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
+        'process.env.GEMINI_API_KEY_1': JSON.stringify(process.env.VITE_GEMINI_API_KEY_1 || process.env.GEMINI_API_KEY_1 || env.VITE_GEMINI_API_KEY_1 || env.GEMINI_API_KEY_1 || ''),
+        'process.env.GEMINI_API_KEY_2': JSON.stringify(process.env.VITE_GEMINI_API_KEY_2 || process.env.GEMINI_API_KEY_2 || env.VITE_GEMINI_API_KEY_2 || env.GEMINI_API_KEY_2 || ''),
+        'process.env.GEMINI_API_KEY_3': JSON.stringify(process.env.VITE_GEMINI_API_KEY_3 || process.env.GEMINI_API_KEY_3 || env.VITE_GEMINI_API_KEY_3 || env.GEMINI_API_KEY_3 || '')
       },
       resolve: {
         alias: {

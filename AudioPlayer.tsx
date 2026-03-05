@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { decode, pcmToWavUrl } from './audioUtils';
+import { decode, pcmToWavUrl } from '../audioUtils';
 
 interface AudioPlayerProps {
   base64Data: string;
@@ -79,7 +79,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ base64Data, autoPlay = false 
   };
 
   return (
-    <div className="bg-white/[0.02] p-4 md:p-8 rounded-[2.5rem] border border-white/10 shadow-2xl w-full h-auto mt-6 space-y-6 backdrop-blur-3xl animate-fadeIn">
+    <div className="bg-white/[0.02] p-8 rounded-[2.5rem] border border-white/10 shadow-2xl w-full mt-6 space-y-6 backdrop-blur-3xl animate-fadeIn">
       {audioUrl && (
         <audio
           ref={audioRef}
@@ -101,12 +101,12 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ base64Data, autoPlay = false 
         />
       )}
 
-      {/* Main Controls Grid */}
-      <div className="grid grid-cols-2 gap-2 w-full h-auto overflow-hidden">
-        <div className="col-span-2 flex items-center justify-center gap-2">
+      {/* Main Controls Row */}
+      <div className="flex items-center justify-between gap-6">
+        <div className="flex items-center gap-4">
           <button 
             onClick={() => skip(-10)}
-            className="w-12 h-12 flex items-center justify-center text-white/30 hover:text-white hover:bg-white/5 active:scale-90 rounded-2xl transition-all border border-transparent hover:border-white/10 text-xs p-1"
+            className="w-12 h-12 flex items-center justify-center text-white/30 hover:text-white hover:bg-white/5 active:scale-90 rounded-2xl transition-all border border-transparent hover:border-white/10"
             title="تأخير 10 ثوان"
           >
             <i className="fa-solid fa-rotate-left text-lg"></i>
@@ -114,34 +114,36 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ base64Data, autoPlay = false 
           
           <button 
             onClick={togglePlay}
-            className="w-12 h-12 flex items-center justify-center bg-white text-black rounded-3xl hover:bg-indigo-50 transition-all shadow-[0_15px_30px_rgba(255,255,255,0.1)] active:scale-95 text-xs p-1"
+            className="w-16 h-16 flex items-center justify-center bg-white text-black rounded-3xl hover:bg-indigo-50 transition-all shadow-[0_15px_30px_rgba(255,255,255,0.1)] active:scale-95"
           >
             <i className={`fa-solid ${isPlaying ? 'fa-pause text-2xl' : 'fa-play text-2xl ml-1'}`}></i>
           </button>
 
           <button 
             onClick={() => skip(10)}
-            className="w-12 h-12 flex items-center justify-center text-white/30 hover:text-white hover:bg-white/5 active:scale-90 rounded-2xl transition-all border border-transparent hover:border-white/10 text-xs p-1"
+            className="w-12 h-12 flex items-center justify-center text-white/30 hover:text-white hover:bg-white/5 active:scale-90 rounded-2xl transition-all border border-transparent hover:border-white/10"
             title="تقديم 10 ثوان"
           >
             <i className="fa-solid fa-rotate-right text-lg"></i>
           </button>
         </div>
 
-        <button
-          onClick={handleDownload}
-          className="bg-white/5 border border-white/10 text-white/40 w-full h-12 flex items-center justify-center rounded-2xl text-xs p-1 font-bold shadow-sm hover:bg-white/10 hover:text-white active:scale-90 transition-all"
-          title="تحميل الملف"
-        >
-          <i className="fa-solid fa-download"></i>
-        </button>
-        <button
-          onClick={changeSpeed}
-          className="bg-white/5 border border-white/10 text-white/40 w-full h-12 flex items-center justify-center rounded-2xl text-xs p-1 font-black shadow-sm hover:bg-white/10 hover:text-white active:scale-95 transition-all flex items-center gap-3 uppercase tracking-widest"
-        >
-          <i className="fa-solid fa-gauge-high text-xs"></i>
-          {playbackRate}x
-        </button>
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={handleDownload}
+            className="bg-white/5 border border-white/10 text-white/40 w-12 h-12 flex items-center justify-center rounded-2xl text-sm font-bold shadow-sm hover:bg-white/10 hover:text-white active:scale-90 transition-all"
+            title="تحميل الملف"
+          >
+            <i className="fa-solid fa-download"></i>
+          </button>
+          <button 
+            onClick={changeSpeed}
+            className="bg-white/5 border border-white/10 text-white/40 px-4 h-12 flex items-center justify-center rounded-2xl text-[10px] font-black shadow-sm hover:bg-white/10 hover:text-white active:scale-95 transition-all flex items-center gap-3 uppercase tracking-widest"
+          >
+            <i className="fa-solid fa-gauge-high text-xs"></i>
+            {playbackRate}x
+          </button>
+        </div>
       </div>
 
       {/* Progress Section */}
