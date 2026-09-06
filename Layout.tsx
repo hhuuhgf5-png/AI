@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { HistoryItem, Dialect, UserUsage } from '../types';
+import { HistoryItem, Dialect, UserUsage } from './types';
 
 interface LayoutProps {
   children: React.ReactNode;

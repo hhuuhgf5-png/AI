@@ -3,5 +3,8 @@
   "description": "A comprehensive educational platform featuring AI assistants, text-to-podcast conversion, flashcard generation, and real-time voice interactions powered by Gemini.",
   "requestFramePermissions": [
     "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
   ]
 }

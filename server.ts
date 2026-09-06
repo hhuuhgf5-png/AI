@@ -79,7 +79,7 @@ async function withFirestoreFallback<T>(operation: (firestore: admin.firestore.F
 
 function getGenAI() {
   if (!genAI) {
-    const apiKey = process.env.VITE_GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY_1 || process.env.GEMINI_API_KEY_1 || '';
+    const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY_1 || process.env.GEMINI_API_KEY_1 || '';
     if (apiKey) {
       genAI = new GoogleGenAI({ apiKey });
     }
@@ -100,21 +100,59 @@ async function startServer() {
 
   const PORT = 3000;
 
-  const checkAndIncrementUsage = async (uid: string, type: 'message' | 'audio', amount: number = 1) => {
-    const firestore = getDb();
-    if (!firestore) throw new Error('خدمة قاعدة البيانات غير متوفرة حالياً');
-    
-    const usage = await getUsage(uid);
-    const docRef = firestore.collection('usage').doc(uid);
+  // In-memory usage store for when Firestore is offline/unconfigured
+  const inMemoryUsage = new Map<string, { messagesUsed: number; audioSecondsUsed: number; lastResetDate: string }>();
 
-    if (type === 'message') {
-      if (usage.messagesUsed >= 10) throw new Error('تجاوزت حد الرسائل اليومي (١٠ رسائل)');
-      await docRef.update({ messagesUsed: admin.firestore.FieldValue.increment(1) });
-    } else {
-      if (usage.audioSecondsUsed >= 300) throw new Error('تجاوزت حد الصوت اليومي (٥ دقائق)');
-      await docRef.update({ audioSecondsUsed: admin.firestore.FieldValue.increment(amount) });
+  const getInMemoryUsage = (uid: string) => {
+    const today = new Date().toISOString().split('T')[0];
+    let userUsage = inMemoryUsage.get(uid);
+    if (!userUsage || userUsage.lastResetDate !== today) {
+      userUsage = { messagesUsed: 0, audioSecondsUsed: 0, lastResetDate: today };
+      inMemoryUsage.set(uid, userUsage);
     }
-    return await getUsage(uid);
+    return userUsage;
+  };
+
+  // Health and config routes
+  app.get('/api/health', (req, res) => {
+    res.json({ status: 'ok' });
+  });
+
+  app.get('/api/config', (req, res) => {
+    const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY_1 || '';
+    res.json({ apiKey });
+  });
+
+  const checkAndIncrementUsage = async (uid: string, type: 'message' | 'audio', amount: number = 1) => {
+    if (!uid) return { messagesUsed: 0, audioSecondsUsed: 0, lastResetDate: new Date().toISOString().split('T')[0] };
+    try {
+      const firestore = getDb();
+      if (!firestore) throw new Error('Database not initialized');
+      
+      const usage = await getUsage(uid);
+      const docRef = firestore.collection('usage').doc(uid);
+
+      if (type === 'message') {
+        if (usage.messagesUsed >= 10) throw new Error('تجاوزت حد الرسائل اليومي (١٠ رسائل)');
+        await docRef.update({ messagesUsed: admin.firestore.FieldValue.increment(1) });
+      } else {
+        if (usage.audioSecondsUsed >= 300) throw new Error('تجاوزت حد الصوت اليومي (٥ دقائق)');
+        await docRef.update({ audioSecondsUsed: admin.firestore.FieldValue.increment(amount) });
+      }
+      return await getUsage(uid);
+    } catch (err: any) {
+      if (err.message?.includes('تجاوزت')) throw err;
+      console.warn("Firestore checkAndIncrementUsage error, falling back to memory:", err.message);
+      const memUsage = getInMemoryUsage(uid);
+      if (type === 'message') {
+        if (memUsage.messagesUsed >= 10) throw new Error('تجاوزت حد الرسائل اليومي (١٠ رسائل)');
+        memUsage.messagesUsed += 1;
+      } else {
+        if (memUsage.audioSecondsUsed >= 300) throw new Error('تجاوزت حد الصوت اليومي (٥ دقائق)');
+        memUsage.audioSecondsUsed += amount;
+      }
+      return memUsage;
+    }
   };
 
   // Gemini API Endpoints
@@ -122,16 +160,16 @@ async function startServer() {
     const { uid, prompt } = req.body;
     try {
       const ai = getGenAI();
-      if (!ai) throw new Error('خدمة الذكاء الاصطناعي غير متوفرة حالياً');
+      if (!ai) throw new Error('خدمة الذكاء الاصطناعي غير متوفرة حالياً. يرجى التأكد من ضبط GEMINI_API_KEY');
       
       await checkAndIncrementUsage(uid, 'message');
       const response = await ai.models.generateContent({
-        model: "gemini-2.0-flash-exp",
+        model: "gemini-2.0-flash",
         contents: prompt
       });
       res.json({ text: response.text, usage: await getUsage(uid) });
     } catch (error: any) {
-      res.status(error.message.includes('تجاوزت') ? 403 : 500).json({ error: error.message });
+      res.status(error.message?.includes('تجاوزت') ? 403 : 500).json({ error: error.message });
     }
   });
 
@@ -139,14 +177,14 @@ async function startServer() {
     const { uid, text, voiceName, dialectInstruction } = req.body;
     try {
       const ai = getGenAI();
-      if (!ai) throw new Error('خدمة الذكاء الاصطناعي غير متوفرة حالياً');
+      if (!ai) throw new Error('خدمة الذكاء الاصطناعي غير متوفرة حالياً. يرجى التأكد من ضبط GEMINI_API_KEY');
 
       const wordCount = text.split(/\s+/).length;
       const estimatedSeconds = Math.ceil(wordCount / 2.5);
       await checkAndIncrementUsage(uid, 'audio', estimatedSeconds);
 
       const response = await ai.models.generateContent({
-        model: "gemini-2.0-flash-exp",
+        model: "gemini-2.0-flash",
         contents: [{ parts: [{ text: `${dialectInstruction}\n\nالنص: ${text}` }] }],
         config: {
           responseModalities: ["AUDIO" as any],
@@ -159,7 +197,7 @@ async function startServer() {
       const audioData = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
       res.json({ audio: audioData, usage: await getUsage(uid) });
     } catch (error: any) {
-      res.status(error.message.includes('تجاوزت') ? 403 : 500).json({ error: error.message });
+      res.status(error.message?.includes('تجاوزت') ? 403 : 500).json({ error: error.message });
     }
   });
 
@@ -167,11 +205,11 @@ async function startServer() {
     const { uid, text, count } = req.body;
     try {
       const ai = getGenAI();
-      if (!ai) throw new Error('خدمة الذكاء الاصطناعي غير متوفرة حالياً');
+      if (!ai) throw new Error('خدمة الذكاء الاصطناعي غير متوفرة حالياً. يرجى التأكد من ضبط GEMINI_API_KEY');
 
       await checkAndIncrementUsage(uid, 'message');
       const response = await ai.models.generateContent({ 
-        model: "gemini-2.0-flash-exp",
+        model: "gemini-2.0-flash",
         contents: `استخرج أهم ${count} مصطلحات من النص ده واعملهم في شكل (سؤال وإجابة) بتنسيق JSON.\nالنص: ${text}`,
         config: {
           responseMimeType: "application/json",
@@ -190,7 +228,7 @@ async function startServer() {
       });
       res.json({ cards: JSON.parse(response.text || '[]'), usage: await getUsage(uid) });
     } catch (error: any) {
-      res.status(error.message.includes('تجاوزت') ? 403 : 500).json({ error: error.message });
+      res.status(error.message?.includes('تجاوزت') ? 403 : 500).json({ error: error.message });
     }
   });
 
@@ -198,33 +236,38 @@ async function startServer() {
   const getUsage = async (uid: string) => {
     const today = new Date().toISOString().split('T')[0];
     
-    return await withFirestoreFallback(async (firestore) => {
-      const docRef = firestore.collection('usage').doc(uid);
-      const doc = await docRef.get();
-      
-      if (!doc.exists) {
-        const initialUsage = {
-          messagesUsed: 0,
-          audioSecondsUsed: 0,
-          lastResetDate: today
-        };
-        await docRef.set(initialUsage);
-        return initialUsage;
-      }
+    try {
+      return await withFirestoreFallback(async (firestore) => {
+        const docRef = firestore.collection('usage').doc(uid);
+        const doc = await docRef.get();
+        
+        if (!doc.exists) {
+          const initialUsage = {
+            messagesUsed: 0,
+            audioSecondsUsed: 0,
+            lastResetDate: today
+          };
+          await docRef.set(initialUsage);
+          return initialUsage;
+        }
 
-      const data = doc.data() as any;
-      if (data.lastResetDate !== today) {
-        const resetUsage = {
-          messagesUsed: 0,
-          audioSecondsUsed: 0,
-          lastResetDate: today
-        };
-        await docRef.set(resetUsage, { merge: true });
-        return resetUsage;
-      }
+        const data = doc.data() as any;
+        if (data.lastResetDate !== today) {
+          const resetUsage = {
+            messagesUsed: 0,
+            audioSecondsUsed: 0,
+            lastResetDate: today
+          };
+          await docRef.set(resetUsage, { merge: true });
+          return resetUsage;
+        }
 
-      return data;
-    });
+        return data;
+      });
+    } catch (err: any) {
+      console.warn("Firestore unavailable for getUsage, using in-memory fallback:", err.message);
+      return getInMemoryUsage(uid);
+    }
   };
 
   app.post('/api/usage', async (req, res) => {
@@ -239,7 +282,7 @@ async function startServer() {
         code: error.code,
         details: error.details
       });
-      res.status(500).json({ error: `فشل جلب الاستهلاك: ${error.message}` });
+      res.json(getInMemoryUsage(uid));
     }
   });
 
@@ -267,15 +310,16 @@ async function startServer() {
       const updatedUsage = await getUsage(uid);
       res.json(updatedUsage);
     } catch (error: any) {
-      console.error("Usage update error details:", {
-        message: error.message,
-        code: error.code,
-        details: error.details
-      });
-      const msg = error.code === 7 
-        ? "خطأ في صلاحيات قاعدة البيانات (PERMISSION_DENIED). يرجى التأكد من إعدادات Firebase." 
-        : `فشل تحديث الاستهلاك: ${error.message}`;
-      res.status(500).json({ error: msg });
+      console.warn("Usage update error, falling back to in-memory:", error.message);
+      const memUsage = getInMemoryUsage(uid);
+      if (type === 'message') {
+        if (memUsage.messagesUsed >= 10) return res.status(403).json({ error: 'تجاوزت حد الرسائل اليومي (١٠ رسائل)' });
+        memUsage.messagesUsed += 1;
+      } else if (type === 'audio') {
+        if (memUsage.audioSecondsUsed >= 300) return res.status(403).json({ error: 'تجاوزت حد الصوت اليومي (٥ دقائق)' });
+        memUsage.audioSecondsUsed += (amount || 0);
+      }
+      res.json(memUsage);
     }
   });
 
@@ -417,9 +461,10 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    app.use(express.static(path.join(__dirname, 'dist')));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+    const distPath = path.join(process.cwd(), 'dist');
+    app.use(express.static(distPath));
+    app.get('*all', (req, res) => {
+      res.sendFile(path.join(distPath, 'index.html'));
     });
   }
 

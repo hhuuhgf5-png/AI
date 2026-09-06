@@ -2,7 +2,6 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import React, { useState, useEffect, useRef } from 'react';
 import { Peer, DataConnection, MediaConnection } from 'peerjs';
-import Layout from './/Layout';
 import Layout from './Layout';
 import { gemini } from './geminiService';
 import { HistoryItem, DialogueType, VoiceGender, Flashcard, Dialect, ChatMessage, SessionState, UserUsage } from './types';
@@ -22,6 +21,8 @@ const App: React.FC = () => {
   const [usage, setUsage] = useState<UserUsage | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [showWelcome, setShowWelcome] = useState(false);
+  const [showDomainHelp, setShowDomainHelp] = useState(false);
+  const [copiedDomain, setCopiedDomain] = useState(false);
   
   // States for tools
   const [assistantResponse, setAssistantResponse] = useState<{ text: string, audio?: string, showGenderMenu?: boolean, sources?: any[] } | null>(null);
@@ -107,13 +108,26 @@ const App: React.FC = () => {
   // PeerJS Initialization
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
       if (currentUser) {
+        setUser(currentUser);
         setShowWelcome(true);
         fetchUsage(currentUser.uid);
         setTimeout(() => setShowWelcome(false), 5000);
       } else {
-        setUsage(null);
+        const savedGuest = localStorage.getItem('elearn_guest_user');
+        if (savedGuest) {
+          try {
+            const parsed = JSON.parse(savedGuest);
+            setUser(parsed);
+            fetchUsage(parsed.uid);
+          } catch {
+            setUser(null);
+            setUsage(null);
+          }
+        } else {
+          setUser(null);
+          setUsage(null);
+        }
       }
       setAuthLoading(false);
     });
@@ -708,7 +722,8 @@ const App: React.FC = () => {
     } catch (err: any) {
       console.error("Login Error:", err);
       if (err.code === 'auth/unauthorized-domain') {
-        setError("خطأ: الدومين غير مسموح به. يرجى إضافة رابط المعاينة في إعدادات Firebase (Authorized Domains).");
+        setShowDomainHelp(true);
+        setError("خطأ: الدومين غير مصرح به في Firebase. اضغط هنا أو في الأسفل لنسخ الدومين وإضافته، أو ادخل كزائر فوراً.");
       } else if (err.code === 'auth/popup-closed-by-user') {
         setError("تم إغلاق نافذة تسجيل الدخول قبل إتمام العملية.");
       } else {
@@ -719,8 +734,29 @@ const App: React.FC = () => {
     }
   };
 
+  const handleGuestLogin = () => {
+    const guestId = 'guest_' + Math.floor(100000 + Math.random() * 900000);
+    const guestUser = {
+      uid: guestId,
+      displayName: 'مستخدم تجريبي (زائر)',
+      email: 'guest@platform.ai',
+      photoURL: null,
+      isGuest: true
+    };
+    try {
+      localStorage.setItem('elearn_guest_user', JSON.stringify(guestUser));
+    } catch (e) {
+      console.warn("Could not save to localStorage", e);
+    }
+    setUser(guestUser);
+    setShowWelcome(true);
+    fetchUsage(guestUser.uid);
+    setTimeout(() => setShowWelcome(false), 5000);
+  };
+
   const handleLogout = async () => {
     try {
+      localStorage.removeItem('elearn_guest_user');
       await signOut(auth);
       setUser(null);
     } catch (err: any) {
@@ -799,18 +835,121 @@ const App: React.FC = () => {
             initial={{ opacity: 0, y: -50 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -50 }}
-            className="fixed top-24 left-4 right-4 md:left-auto md:right-8 md:w-96 bg-red-600 text-white p-6 rounded-3xl shadow-[0_20px_50px_rgba(220,38,38,0.3)] z-[2100] flex items-center justify-between border-2 border-white/20"
+            className="fixed top-24 left-4 right-4 md:left-auto md:right-8 md:w-96 bg-red-600 text-white p-5 rounded-3xl shadow-[0_20px_50px_rgba(220,38,38,0.4)] z-[2100] flex flex-col gap-3 border-2 border-white/20"
           >
-            <div className="flex items-center gap-4">
-              <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center shrink-0">
-                <i className="fa-solid fa-circle-exclamation text-xl"></i>
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center shrink-0">
+                  <i className="fa-solid fa-circle-exclamation text-xl"></i>
+                </div>
+                <span className="text-sm font-black leading-snug">{error}</span>
               </div>
-              <span className="text-sm font-black leading-tight">{error}</span>
+              <button onClick={() => setError(null)} className="w-8 h-8 flex items-center justify-center hover:bg-white/20 active:scale-90 rounded-lg transition-all shrink-0">
+                <i className="fa-solid fa-xmark"></i>
+              </button>
             </div>
-            <button onClick={() => setError(null)} className="w-8 h-8 flex items-center justify-center hover:bg-white/20 active:scale-90 rounded-lg transition-all shrink-0">
-              <i className="fa-solid fa-xmark"></i>
-            </button>
+            {error.includes('الدومين') && (
+              <div className="flex gap-2 pt-2 border-t border-white/15">
+                <button
+                  onClick={() => setShowDomainHelp(true)}
+                  className="flex-1 py-2 px-3 bg-white text-red-600 rounded-xl text-xs font-black shadow hover:bg-white/90 transition-all text-center"
+                >
+                  عرض خطوات الحل والنسخ
+                </button>
+                <button
+                  onClick={() => {
+                    setError(null);
+                    handleGuestLogin();
+                  }}
+                  className="py-2 px-3 bg-white/20 hover:bg-white/30 text-white rounded-xl text-xs font-black transition-all"
+                >
+                  دخول كزائر
+                </button>
+              </div>
+            )}
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Domain Help Modal */}
+      <AnimatePresence>
+        {showDomainHelp && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[2200] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="bg-[#121214] border border-white/15 rounded-3xl p-6 md:p-8 max-w-lg w-full text-right shadow-[0_30px_90px_rgba(0,0,0,0.9)] space-y-6"
+              dir="rtl"
+            >
+              <div className="flex items-start justify-between gap-4 border-b border-white/5 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 shrink-0">
+                    <i className="fa-solid fa-shield-halved text-2xl"></i>
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-black text-white">إضافة الدومين في Firebase</h3>
+                    <p className="text-xs text-white/50">خطوات تفعيل تسجيل الدخول على رابط المعاينة</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setShowDomainHelp(false)}
+                  className="w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 text-white/50 hover:text-white flex items-center justify-center transition-colors"
+                >
+                  <i className="fa-solid fa-xmark"></i>
+                </button>
+              </div>
+
+              <div className="bg-white/5 border border-white/10 rounded-2xl p-4 space-y-2">
+                <p className="text-xs text-white/70 font-semibold">الدومين الحالي المطلوب إضافته:</p>
+                <div className="flex items-center justify-between gap-2 bg-black/70 rounded-xl p-2.5 border border-white/5">
+                  <code className="text-xs font-mono text-indigo-300 truncate select-all" dir="ltr">
+                    {window.location.hostname}
+                  </code>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(window.location.hostname);
+                      setCopiedDomain(true);
+                      setTimeout(() => setCopiedDomain(false), 2500);
+                    }}
+                    className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg shrink-0 flex items-center gap-1.5 transition-colors shadow"
+                  >
+                    <i className={`fa-solid ${copiedDomain ? 'fa-check text-emerald-300' : 'fa-copy'}`}></i>
+                    <span>{copiedDomain ? 'تم النسخ!' : 'نسخ'}</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-3 text-xs text-white/80 leading-relaxed">
+                <p className="font-bold text-white text-sm">خطوات الإضافة في Firebase Console:</p>
+                <ol className="list-decimal list-inside space-y-2 text-white/70 pr-1">
+                  <li>افتح <a href="https://console.firebase.google.com/" target="_blank" rel="noreferrer" className="text-indigo-400 font-bold underline hover:text-indigo-300">Firebase Console</a> ثم اختر مشروعك (wepe-91da3).</li>
+                  <li>من القائمة الجانبية اختر <strong>Authentication</strong> ثم تبويب <strong>Settings (الإعدادات)</strong>.</li>
+                  <li>انزل لقسم <strong>Authorized domains (النطاقات المعتمدة)</strong>.</li>
+                  <li>اضغط <strong>Add domain (إضافة نطاق)</strong>، ألصق الدومين المنسوخ أعلاه، واضغط حفظ.</li>
+                </ol>
+              </div>
+
+              <div className="pt-2 flex flex-col sm:flex-row gap-3">
+                <button
+                  onClick={() => {
+                    setShowDomainHelp(false);
+                    handleGuestLogin();
+                  }}
+                  className="flex-1 py-3 px-4 bg-white text-black font-black text-xs rounded-xl hover:bg-white/90 transition-all text-center flex items-center justify-center gap-2"
+                >
+                  <i className="fa-solid fa-arrow-right-to-bracket text-indigo-600"></i>
+                  <span>تخطي والدخول كزائر فوراً</span>
+                </button>
+                <button
+                  onClick={() => setShowDomainHelp(false)}
+                  className="py-3 px-4 bg-white/10 hover:bg-white/15 text-white text-xs font-bold rounded-xl transition-all text-center"
+                >
+                  إغلاق
+                </button>
+              </div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
 
@@ -843,7 +982,7 @@ const App: React.FC = () => {
           <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-indigo-500/10 blur-[120px] rounded-full"></div>
           <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-emerald-500/5 blur-[120px] rounded-full"></div>
           
-          <div className="max-w-md w-full space-y-12 text-center relative z-10">
+          <div className="max-w-md w-full space-y-10 text-center relative z-10">
             <motion.div 
               initial={{ scale: 0.8, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
@@ -853,34 +992,54 @@ const App: React.FC = () => {
               <i className="fa-solid fa-graduation-cap text-black text-5xl"></i>
             </motion.div>
             
-            <div className="space-y-6">
+            <div className="space-y-4">
               <h1 className="text-6xl font-black text-white font-serif italic tracking-tighter leading-none">
                 الـ<span className="text-indigo-500">منصة</span>
               </h1>
               <div className="h-1 w-20 bg-indigo-500 mx-auto rounded-full opacity-50"></div>
-              <p className="text-white/40 font-medium text-xl leading-relaxed max-w-[280px] mx-auto">
-                مرحباً بك في مستقبل التعليم. يرجى تسجيل الدخول للبدء.
+              <p className="text-white/40 font-medium text-lg leading-relaxed max-w-[280px] mx-auto">
+                مرحباً بك في مستقبل التعليم الذكي. اختر طريقة الدخول:
               </p>
             </div>
 
-            <motion.button 
-              whileHover={{ scale: 1.02, y: -2 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={handleLogin}
-              disabled={loading}
-              className="w-full group relative bg-white text-black py-7 rounded-[2.5rem] font-black text-sm uppercase tracking-[0.2em] shadow-[0_20px_40px_rgba(255,255,255,0.1)] flex items-center justify-center gap-5 overflow-hidden transition-all"
-            >
-              <div className="absolute inset-0 bg-indigo-500/5 translate-y-full group-hover:translate-y-0 transition-transform duration-500"></div>
-              <i className="fa-brands fa-google text-2xl relative z-10"></i>
-              <span className="relative z-10">الدخول بواسطة جوجل</span>
-            </motion.button>
+            <div className="space-y-4">
+              <motion.button 
+                whileHover={{ scale: 1.02, y: -2 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={handleLogin}
+                disabled={loading}
+                className="w-full group relative bg-white text-black py-6 rounded-[2.2rem] font-black text-sm uppercase tracking-[0.2em] shadow-[0_20px_40px_rgba(255,255,255,0.1)] flex items-center justify-center gap-4 overflow-hidden transition-all cursor-pointer"
+              >
+                <div className="absolute inset-0 bg-indigo-500/5 translate-y-full group-hover:translate-y-0 transition-transform duration-500"></div>
+                <i className="fa-brands fa-google text-2xl relative z-10 text-indigo-600"></i>
+                <span className="relative z-10">الدخول بواسطة جوجل</span>
+              </motion.button>
 
-            <div className="pt-10 flex flex-col items-center gap-4">
-              <p className="text-[9px] text-white/10 font-black uppercase tracking-[0.4em]">الذكاء الاصطناعي التعليمي المتطور</p>
+              <motion.button 
+                whileHover={{ scale: 1.02, y: -1 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={handleGuestLogin}
+                disabled={loading}
+                className="w-full bg-white/5 border border-white/10 hover:border-white/20 hover:bg-white/10 text-white py-4 rounded-[2rem] font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-3 transition-all cursor-pointer shadow-lg"
+              >
+                <i className="fa-solid fa-bolt text-amber-400"></i>
+                <span>دخول سريع كزائر (بدون تسجيل)</span>
+              </motion.button>
+
+              <button
+                onClick={() => setShowDomainHelp(true)}
+                className="text-[11px] text-indigo-400/80 hover:text-indigo-300 font-semibold underline transition-colors cursor-pointer"
+              >
+                هل يظهر لك خطأ الدومين غير مسموح به؟ اضغط هنا للحل
+              </button>
+            </div>
+
+            <div className="pt-6 flex flex-col items-center gap-4">
+              <p className="text-[9px] text-white/20 font-black uppercase tracking-[0.4em]">الذكاء الاصطناعي التعليمي المتطور</p>
               <div className="flex gap-6">
-                <i className="fa-brands fa-apple text-white/5 text-lg"></i>
-                <i className="fa-brands fa-microsoft text-white/5 text-lg"></i>
-                <i className="fa-brands fa-google text-white/5 text-lg"></i>
+                <i className="fa-brands fa-apple text-white/10 text-lg"></i>
+                <i className="fa-brands fa-microsoft text-white/10 text-lg"></i>
+                <i className="fa-brands fa-google text-white/10 text-lg"></i>
               </div>
             </div>
           </div>

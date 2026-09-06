@@ -94,6 +94,9 @@ export class GeminiService {
     // We'll just use the key from the server config.
     const response = await fetch('/api/config');
     const config = await response.json();
+    if (!config.apiKey) {
+      throw new Error('لم يتم العثور على مفتاح GEMINI_API_KEY. يرجى ضبطه في إعدادات البيئة.');
+    }
     const { GoogleGenAI, Modality } = await import("@google/genai");
     const ai = new GoogleGenAI({ apiKey: config.apiKey });
     const instruction = dialectInstructions[dialect];
@@ -102,7 +105,7 @@ export class GeminiService {
       : `أنت مساعد صوتي ذكي وودود. ${instruction} ساعد المستخدم في أي استفسار تعليمي بطريقة تفاعلية وسريعة.`;
 
     return ai.live.connect({
-      model: 'gemini-2.0-flash-exp',
+      model: 'gemini-2.0-flash',
       callbacks,
       config: {
         responseModalities: [Modality.AUDIO],
